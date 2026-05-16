@@ -143,9 +143,13 @@ server {
         proxy_set_header X-Forwarded-Proto $scheme;
     }
 
-    # Static files (jika tidak embed)
-    location /uploads/ {
-        alias /opt/sekolah-app/uploads/;
+    # JANGAN expose /uploads/ langsung dari filesystem.
+    # Semua file privat (bukti bayar, KK, akta, berkas PPDB, foto siswa)
+    # harus diakses lewat auth handler: GET /api/v1/upload/:path
+    #
+    # Hanya public assets (logo sekolah) yang boleh di-serve langsung:
+    location /public/ {
+        alias /opt/sekolah-app/public/;
         expires 30d;
     }
 }

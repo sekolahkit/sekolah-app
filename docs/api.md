@@ -274,7 +274,14 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
 | POST | `/upload` | Upload file | Auth |
-| GET | `/upload/:path` | Download file | Auth |
+| GET | `/upload/:path` | Download file (cek auth + relasi) | Auth |
+| GET | `/upload/signed/:token` | Download file via signed URL (TTL 5-15 menit) | Public |
+
+> **File Access Control:**
+> - Semua file privat (bukti bayar, KK, akta, berkas PPDB, foto siswa, dokumen pembayaran) hanya bisa diakses lewat endpoint auth handler.
+> - Handler cek: (1) user authenticated, (2) role diizinkan, (3) user punya relasi ke data terkait (via tenant scoping + pengguna_siswa).
+> - **Signed URL** digunakan untuk kasus khusus: link sementara di notifikasi WhatsApp/Telegram/Email, preview file, atau sharing terbatas. TTL pendek (5-15 menit), single-use opsional.
+> - Public assets (logo sekolah) disimpan terpisah di folder `/public/` dan boleh di-serve langsung tanpa auth.
 
 ## HTTP Status Codes
 

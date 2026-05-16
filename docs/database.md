@@ -204,6 +204,25 @@ CREATE TABLE siswa (
 );
 ```
 
+### pengguna_siswa
+Tabel relasi pengguna ke siswa untuk authorization. Menentukan siapa boleh akses data siswa mana.
+
+```sql
+CREATE TABLE pengguna_siswa (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pengguna_id INTEGER NOT NULL,
+    siswa_id INTEGER NOT NULL,
+    hubungan TEXT NOT NULL,        -- diri_sendiri, ayah, ibu, wali, lainnya
+    aktif BOOLEAN DEFAULT TRUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (pengguna_id) REFERENCES pengguna(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    UNIQUE(pengguna_id, siswa_id)
+);
+```
+
+> **Catatan:** Field `nama_ortu`, `no_hp_ortu`, `email_ortu` di tabel `siswa` tetap dipertahankan sebagai data kontak denormalized. Tabel `pengguna_siswa` adalah sumber kebenaran untuk authorization, bukan field kontak tersebut.
+
 ### kelas_siswa
 Tabel penghubung siswa dan kelas per tahun ajaran. Mendukung tracking mutasi.
 

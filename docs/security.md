@@ -124,6 +124,60 @@ r.Group(func(r chi.Router) {
 })
 ```
 
+### Object-Level Authorization (Siswa & Orangtua)
+
+Role `siswa` dan `orangtua` hanya boleh akses data siswa yang terhubung via tabel `pengguna_siswa`. Ini bukan role-level check saja — harus ada relasi eksplisit.
+
+#### Flow Authorization
+
+```
+1. User dengan role siswa/orangtua request GET /siswa/:id/tagihan
+2. Middleware cek role → lolos (role diizinkan)
+3. Handler cek relasi:
+   SELECT 1 FROM pengguna_siswa
+   WHERE pengguna_id = ? AND siswa_id = ? AND aktif = TRUE
+4. Jika tidak ada relasi → 404 (bukan 403, mencegah enumeration)
+5. Jika ada → lanjut proses
+```
+
+#### Contoh Implementasi
+
+```go
+func (h *SiswaHandler) GetTagihan(w http.ResponseWriter, r *http.Request) {
+    user := middleware.GetUser(r.Context())
+    siswaID := chi.URLParam(r, "id")
+
+    // Admin/Operator: cukup cek tenant (sekolah_id)
+    if user.Role == "admin" || user.Role == "operator" {
+        tagihan, err := h.service.GetTagihanBySiswa(r.Context(), user.SekolahID, siswaID)
+        // ...
+        return
+    }
+
+    // Siswa/Orangtua: cek relasi di pengguna_siswa
+    hasAccess, err := h.service.CekRelasiPengguna(r.Context(), user.ID, siswaID)
+    if !hasAccess {
+        respond.Error(w, 404, "NOT_FOUND", "Data tidak ditemukan")
+        return
+    }
+
+    tagihan, err := h.service.GetTagihanBySiswa(r.Context(), user.SekolahID, siswaID)
+    // ...
+}
+```
+
+#### Aturan Relasi
+
+| Hubungan | Artinya |
+|----------|---------|
+| `diri_sendiri` | User role `siswa` terhubung ke record siswa miliknya |
+| `ayah` | User role `orangtua` adalah ayah dari siswa |
+| `ibu` | User role `orangtua` adalah ibu dari siswa |
+| `wali` | User role `orangtua` adalah wali dari siswa |
+| `lainnya` | Relasi lain yang diizinkan admin |
+
+Satu orangtua bisa terhubung ke banyak siswa (misal kakak-adik). Satu siswa bisa punya banyak pengguna terhubung (ayah + ibu).
+
 ---
 
 ## CSRF Protection
@@ -260,6 +314,49 @@ type CreateSiswaRequest struct {
 - Tipe file: hanya JPEG, PNG, PDF
 - Ukuran max: 5 MB
 - Nama file: di-randomize untuk mencegah path traversal
+
+### File Access Control
+
+Semua file yang diupload dibagi dua kategori:
+
+| Kategori | Contoh | Akses |
+|----------|--------|-------|
+| Public | Logo sekolah | Langsung via `/public/`, tanpa auth |
+| Private | Bukti bayar, KK, akta, berkas PPDB, foto siswa | Hanya via auth handler `GET /api/v1/upload/:path` |
+
+#### Default: Auth Handler
+
+```
+1. Request GET /api/v1/upload/:path
+2. Cek auth (access_token cookie)
+3. Cek role + relasi:
+   - Admin/Operator: akses semua file di sekolah_id yang sama
+   - Guru: akses foto siswa di kelas yang diajar
+   - Siswa/Orangtua: akses file milik siswa yang terhubung (via pengguna_siswa)
+4. Jika tidak punya akses → 404
+5. Jika OK → stream file
+```
+
+#### Opsional: Signed URL
+
+Untuk kasus di mana auth cookie tidak tersedia (link di notifikasi WhatsApp/Telegram/Email):
+
+```
+1. Backend generate signed URL: /api/v1/upload/signed/:token
+2. Token berisi: file_path + expires_at + HMAC signature
+3. TTL pendek: 5-15 menit
+4. Tidak perlu auth cookie untuk akses
+5. Setelah expired → 403
+```
+
+Signed URL digunakan untuk:
+- Link download di pesan WhatsApp/Telegram
+- Preview file di email notifikasi
+- Sharing terbatas ke pihak ketiga
+
+#### Deployment
+
+**Jangan** expose folder `/uploads/` langsung via Nginx/Caddy. Semua file privat harus melewati backend auth handler. Hanya folder `/public/` (logo, assets) yang boleh di-serve langsung.
 
 ---
 
