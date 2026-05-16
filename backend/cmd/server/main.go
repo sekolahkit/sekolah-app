@@ -18,6 +18,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
 	"github.com/Sekolahkit/sekolah-app/internal/upload"
+	"github.com/Sekolahkit/sekolah-app/pkg/frontend"
 	"github.com/Sekolahkit/sekolah-app/pkg/config"
 	"github.com/Sekolahkit/sekolah-app/pkg/database"
 	mw "github.com/Sekolahkit/sekolah-app/pkg/middleware"
@@ -271,6 +272,13 @@ func main() {
 			r.Get("/upload/*", uploadHandler.Download)
 		})
 	})
+
+	if frontend.HasBuild() {
+		r.NotFound(frontend.Handler().ServeHTTP)
+		slog.Info("frontend embedded, serving SPA")
+	} else {
+		slog.Info("frontend not embedded, API-only mode")
+	}
 
 	addr := fmt.Sprintf(":%d", cfg.App.Port)
 	slog.Info("server listening", "addr", addr)
