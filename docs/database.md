@@ -333,7 +333,11 @@ CREATE TABLE ppdb_pendaftaran (
     foto TEXT,
     status TEXT DEFAULT 'menunggu',
     -- menunggu, berkas_lengkap, berkas_ditolak,
-    -- diterima, tidak_diterima, daftar_ulang
+    -- diterima, tidak_diterima, cadangan, daftar_ulang
+    skor DECIMAL(10,2),           -- skor ranking (NULL jika belum dihitung)
+    ranking INTEGER,              -- posisi ranking (NULL jika belum dihitung)
+    latitude REAL,                -- koordinat untuk zonasi (opsional)
+    longitude REAL,               -- koordinat untuk zonasi (opsional)
     catatan TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -381,12 +385,32 @@ Tabel pengumuman PPDB.
 CREATE TABLE ppdb_pengumuman (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pendaftaran_id INTEGER NOT NULL,
-    status TEXT NOT NULL,          -- diterima, tidak_diterima
+    status TEXT NOT NULL,          -- diterima, tidak_diterima, cadangan
     ranking INTEGER,
     keterangan TEXT,
     tanggal_pengumuman DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftaran(id)
+);
+```
+
+### ppdb_konfigurasi_ranking
+Tabel konfigurasi ranking PPDB per sekolah per tahun ajaran.
+
+```sql
+CREATE TABLE ppdb_konfigurasi_ranking (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
+    tahun_ajaran_id INTEGER NOT NULL,
+    metode TEXT NOT NULL,          -- nilai_ujian, zonasi, kombinasi, manual
+    bobot_json TEXT,               -- JSON: {"nilai_ujian": 60, "zonasi": 30, "prestasi": 10}
+    kuota INTEGER NOT NULL,        -- jumlah yang diterima
+    cadangan INTEGER DEFAULT 0,   -- jumlah cadangan
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id),
+    UNIQUE(sekolah_id, tahun_ajaran_id)
 );
 ```
 
@@ -444,6 +468,7 @@ CREATE TABLE schema_migrations (
 | `berkas_lengkap` | Berkas sudah lengkap |
 | `berkas_ditolak` | Berkas ditolak |
 | `diterima` | Diterima |
+| `cadangan` | Masuk daftar cadangan |
 | `tidak_diterima` | Tidak diterima |
 | `daftar_ulang` | Sudah daftar ulang |
 
@@ -530,4 +555,15 @@ CREATE INDEX idx_notifikasi_antrian_scheduled_at ON notifikasi_antrian(scheduled
 
 -- kelas_siswa (tenant)
 CREATE INDEX idx_kelas_siswa_sekolah_id ON kelas_siswa(sekolah_id);
+
+-- pengguna_siswa
+CREATE INDEX idx_pengguna_siswa_pengguna_id ON pengguna_siswa(pengguna_id);
+CREATE INDEX idx_pengguna_siswa_siswa_id ON pengguna_siswa(siswa_id);
+
+-- ppdb_konfigurasi_ranking
+CREATE INDEX idx_ppdb_konfigurasi_ranking_sekolah_id ON ppdb_konfigurasi_ranking(sekolah_id);
+
+-- ppdb_pendaftaran (ranking)
+CREATE INDEX idx_ppdb_pendaftaran_ranking ON ppdb_pendaftaran(ranking);
+CREATE INDEX idx_ppdb_pendaftaran_skor ON ppdb_pendaftaran(skor);
 ```

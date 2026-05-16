@@ -260,9 +260,9 @@ Aplikasi menjalankan database migration otomatis saat startup:
 5. Jika sukses → lanjut serve
 ```
 
-### Zero-Downtime Update (Recommended)
+### Minimal-Downtime Update
 
-Untuk menghindari downtime saat update:
+Untuk meminimalkan downtime saat update:
 
 #### Binary Deployment
 
@@ -317,6 +317,18 @@ cp data/sekolah-backup-YYYYMMDD.db data/sekolah.db
 sudo systemctl start sekolah-app
 ```
 
+> **Peringatan:** Restore database akan menghilangkan semua data yang masuk setelah backup dibuat (transaksi, pembayaran, pendaftaran). Lakukan restore hanya jika migration menyebabkan kerusakan data. Untuk bug non-data, cukup rollback binary tanpa restore database.
+
+### Maintenance Window
+
+Untuk destructive restore (rollback database):
+1. Umumkan maintenance window ke user (minimal 30 menit sebelumnya)
+2. Nonaktifkan akses user (maintenance mode)
+3. Backup state terkini sebelum restore
+4. Lakukan restore
+5. Verifikasi data integrity
+6. Aktifkan kembali akses user
+
 ### Migration Safety Rules
 
 | Rule | Keterangan |
@@ -326,6 +338,43 @@ sudo systemctl start sekolah-app
 | No rename | Jangan rename kolom/tabel di migration (buat kolom baru, copy data, hapus kolom lama di migration berikutnya) |
 | Test dulu | Jalankan migration di staging/backup database sebelum production |
 | Backup wajib | Selalu backup sebelum update |
+| Kompatibilitas N-1 | Binary versi lama (N-1) harus tetap bisa jalan di schema baru (N) |
+
+### Expand/Contract Pattern
+
+Untuk perubahan schema yang breaking (rename kolom, ubah tipe, hapus kolom):
+
+```
+Migration 1 (Expand):
+  - Tambah kolom baru
+  - Backfill data dari kolom lama ke kolom baru
+  - Deploy binary baru yang baca dari kolom baru, tulis ke keduanya
+
+Migration 2 (Contract) — di release berikutnya:
+  - Pastikan semua binary sudah versi baru
+  - Hapus kolom lama
+```
+
+Ini memastikan rollback binary tetap aman karena kolom lama masih ada di migration 1.
+
+### Health Check
+
+Endpoint `GET /health` untuk verifikasi post-update:
+
+```json
+{
+    "status": "ok",
+    "version": "1.2.0",
+    "database": "connected",
+    "migration": "up-to-date",
+    "uptime": "5m30s"
+}
+```
+
+Gunakan setelah update untuk memastikan aplikasi berjalan normal:
+```bash
+curl -s http://localhost:8080/health | jq .
+```
 
 ---
 

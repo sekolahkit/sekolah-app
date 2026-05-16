@@ -331,9 +331,12 @@ Jarak dihitung berdasarkan koordinat alamat pendaftar (opsional, bisa input manu
 ```
 menunggu → berkas_lengkap → diterima
          → berkas_ditolak
+         → cadangan → diterima (jika kuota terbuka)
+                    → tidak_diterima (jika periode habis)
 
 menunggu → diterima (tanpa verifikasi berkas)
 menunggu → tidak_diterima
+menunggu → cadangan
 diterima → daftar_ulang
 ```
 
@@ -363,7 +366,7 @@ type Notifier interface {
 ### Queue
 Notifikasi dikirim via queue untuk reliability:
 ```
-1. Buat notifikasi → simpan ke notifikasi_queue (status: pending)
+1. Buat notifikasi → simpan ke notifikasi_antrian (status: pending)
 2. Worker proses queue
 3. Kirim via adapter yang aktif
 4. Update status (sent / failed)
