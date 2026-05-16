@@ -8,8 +8,11 @@ import (
 
 	"github.com/Sekolahkit/sekolah-app/internal/auth"
 	"github.com/Sekolahkit/sekolah-app/internal/kelas"
+	"github.com/Sekolahkit/sekolah-app/internal/laporan"
 	"github.com/Sekolahkit/sekolah-app/internal/migration"
+	"github.com/Sekolahkit/sekolah-app/internal/notifikasi"
 	"github.com/Sekolahkit/sekolah-app/internal/pembayaran"
+	"github.com/Sekolahkit/sekolah-app/internal/ppdb"
 	"github.com/Sekolahkit/sekolah-app/internal/rekening"
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
@@ -206,6 +209,60 @@ func main() {
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Post("/pembayaran", pembayaranHandler.CreatePembayaran)
+		})
+
+		ppdbRepo := ppdb.NewRepository(db)
+		ppdbService := ppdb.NewService(ppdbRepo)
+		ppdbHandler := ppdb.NewHandler(ppdbService)
+
+		r.Post("/ppdb/daftar", ppdbHandler.Daftar)
+		r.Get("/ppdb/pengumuman/{id}", ppdbHandler.GetPengumuman)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin", "operator"))
+
+			r.Get("/ppdb/pendaftar", ppdbHandler.ListPendaftar)
+			r.Get("/ppdb/pendaftar/{id}", ppdbHandler.GetPendaftar)
+			r.Put("/ppdb/pendaftar/{id}", ppdbHandler.UpdateStatus)
+			r.Get("/ppdb/pendaftar/{id}/berkas", ppdbHandler.ListBerkas)
+			r.Put("/ppdb/berkas/{id}", ppdbHandler.VerifikasiBerkas)
+			r.Post("/ppdb/ujian", ppdbHandler.InputUjian)
+			r.Post("/ppdb/pengumuman", ppdbHandler.PublishPengumuman)
+			r.Get("/ppdb/konfigurasi-ranking", ppdbHandler.GetKonfigurasiRanking)
+			r.Post("/ppdb/konfigurasi-ranking", ppdbHandler.UpsertKonfigurasiRanking)
+		})
+
+		notifRepo := notifikasi.NewRepository(db)
+		notifService := notifikasi.NewService(notifRepo)
+		notifHandler := notifikasi.NewHandler(notifService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin"))
+
+			r.Get("/notifikasi", notifHandler.ListNotifikasi)
+			r.Post("/notifikasi/test", notifHandler.TestSend)
+			r.Get("/notifikasi/queue", notifHandler.QueueStatus)
+		})
+
+		laporanRepo := laporan.NewRepository(db)
+		laporanService := laporan.NewService(laporanRepo)
+		laporanHandler := laporan.NewHandler(laporanService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin"))
+			r.Get("/dashboard/admin", laporanHandler.DashboardAdmin)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin", "operator"))
+			r.Get("/dashboard/operator", laporanHandler.DashboardOperator)
+			r.Get("/laporan/pembayaran", laporanHandler.RekapPembayaran)
+			r.Get("/laporan/ppdb", laporanHandler.RekapPPDB)
+			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
 		})
 	})
 
