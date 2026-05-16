@@ -92,14 +92,18 @@ jobs:
 
       - name: Package (Windows)
         if: matrix.archive == 'zip'
-        shell: bash
+        shell: pwsh
         run: |
-          cd backend && zip ../sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip sekolah-app${{ matrix.ext }}
+          Compress-Archive -Path backend/sekolah-app${{ matrix.ext }} -DestinationPath sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip
 
       - name: Generate checksum
         shell: bash
         run: |
-          sha256sum sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.* > checksums-${{ matrix.goos }}.txt
+          if command -v sha256sum &> /dev/null; then
+            sha256sum sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.* > checksums-${{ matrix.goos }}.txt
+          else
+            shasum -a 256 sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.* > checksums-${{ matrix.goos }}.txt
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
