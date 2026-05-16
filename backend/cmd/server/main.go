@@ -11,6 +11,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/laporan"
 	"github.com/Sekolahkit/sekolah-app/internal/migration"
 	"github.com/Sekolahkit/sekolah-app/internal/notifikasi"
+	"github.com/Sekolahkit/sekolah-app/internal/payment"
 	"github.com/Sekolahkit/sekolah-app/internal/pembayaran"
 	"github.com/Sekolahkit/sekolah-app/internal/ppdb"
 	"github.com/Sekolahkit/sekolah-app/internal/rekening"
@@ -208,6 +209,26 @@ func main() {
 				r.Put("/{id}/reject", pembayaranHandler.RejectPembayaran)
 			})
 		})
+
+		paymentRepo := payment.NewRepository(db)
+		var gateways []payment.Gateway
+		if secrets.MidtransServerKey != "" {
+			gateways = append(gateways, payment.NewMidtrans(payment.MidtransConfig{
+				ServerKey: secrets.MidtransServerKey,
+				ClientKey: secrets.MidtransClientKey,
+			}))
+		}
+		if secrets.XenditSecretKey != "" {
+			gateways = append(gateways, payment.NewXendit(payment.XenditConfig{
+				SecretKey:     secrets.XenditSecretKey,
+				CallbackToken: secrets.XenditSecretKey,
+			}))
+		}
+		paymentService := payment.NewService(paymentRepo, gateways...)
+		paymentHandler := payment.NewHandler(paymentService)
+
+		r.Post("/payment/callback/midtrans", paymentHandler.MidtransCallback)
+		r.Post("/payment/callback/xendit", paymentHandler.XenditCallback)
 
 		ppdbRepo := ppdb.NewRepository(db)
 		ppdbService := ppdb.NewService(ppdbRepo)
