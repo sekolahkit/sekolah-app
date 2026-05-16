@@ -148,7 +148,7 @@ func (s *Service) ListBerkas(sekolahID, pendaftaranID int64) ([]Berkas, error) {
 	return s.repo.ListBerkasByPendaftaran(pendaftaranID)
 }
 
-func (s *Service) VerifikasiBerkas(id int64, req VerifikasiBerkasRequest) error {
+func (s *Service) VerifikasiBerkas(sekolahID, id int64, req VerifikasiBerkasRequest) error {
 	errs := validator.Collect(
 		validator.Required("status", req.Status),
 		validator.InList("status", req.Status, []string{"pending", "diterima", "ditolak"}),
@@ -156,7 +156,7 @@ func (s *Service) VerifikasiBerkas(id int64, req VerifikasiBerkasRequest) error 
 	if len(errs) > 0 {
 		return errs
 	}
-	return s.repo.UpdateBerkasStatus(id, req.Status, req.Catatan)
+	return s.repo.UpdateBerkasStatus(sekolahID, id, req.Status, req.Catatan)
 }
 
 func (s *Service) InputNilaiUjian(sekolahID int64, req InputUjianRequest) (*Ujian, error) {

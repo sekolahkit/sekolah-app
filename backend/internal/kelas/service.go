@@ -114,6 +114,10 @@ func (s *Service) AddSiswa(sekolahID, kelasID int64, req AddSiswaRequest) error 
 		return fmt.Errorf("kelas tidak ditemukan")
 	}
 
+	if !s.repo.SiswaExistsInSekolah(sekolahID, req.SiswaID) {
+		return fmt.Errorf("siswa tidak ditemukan")
+	}
+
 	exists, err := s.repo.SiswaInKelas(kelasID, req.SiswaID)
 	if err != nil {
 		return fmt.Errorf("cek siswa: %w", err)

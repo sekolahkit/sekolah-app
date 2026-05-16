@@ -134,6 +134,7 @@ func (h *Handler) ListBerkas(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) VerifikasiBerkas(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		response.Error(w, 400, "INVALID_ID", "ID tidak valid")
@@ -146,7 +147,7 @@ func (h *Handler) VerifikasiBerkas(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.VerifikasiBerkas(id, req); err != nil {
+	if err := h.service.VerifikasiBerkas(user.SekolahID, id, req); err != nil {
 		if ve, ok := err.(validator.ValidationErrors); ok {
 			response.ErrorWithDetails(w, 400, "VALIDATION_ERROR", "Data tidak valid", ve)
 			return

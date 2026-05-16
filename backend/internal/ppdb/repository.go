@@ -241,12 +241,10 @@ func (r *Repository) CreateBerkas(b *Berkas) (int64, error) {
 	return result.LastInsertId()
 }
 
-func (r *Repository) UpdateBerkasStatus(id int64, status, catatan string) error {
-	_, err := sq.Update("ppdb_berkas").
-		Set("status", status).
-		Set("catatan", catatan).
-		Where(sq.Eq{"id": id}).
-		RunWith(r.db).Exec()
+func (r *Repository) UpdateBerkasStatus(sekolahID, id int64, status, catatan string) error {
+	_, err := r.db.Exec(
+		"UPDATE ppdb_berkas SET status=?, catatan=? WHERE id=? AND pendaftaran_id IN (SELECT id FROM ppdb_pendaftaran WHERE sekolah_id=?)",
+		status, catatan, id, sekolahID)
 	return err
 }
 

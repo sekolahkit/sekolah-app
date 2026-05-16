@@ -201,14 +201,10 @@ func main() {
 			r.Route("/pembayaran", func(r chi.Router) {
 				r.Get("/", pembayaranHandler.ListPembayaran)
 				r.Get("/{id}", pembayaranHandler.GetPembayaranByID)
+				r.Post("/", pembayaranHandler.CreatePembayaran)
 				r.Put("/{id}/verify", pembayaranHandler.VerifyPembayaran)
 				r.Put("/{id}/reject", pembayaranHandler.RejectPembayaran)
 			})
-		})
-
-		r.Group(func(r chi.Router) {
-			r.Use(mw.Auth(secrets.JWTSecret))
-			r.Post("/pembayaran", pembayaranHandler.CreatePembayaran)
 		})
 
 		ppdbRepo := ppdb.NewRepository(db)

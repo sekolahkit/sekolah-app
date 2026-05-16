@@ -2,6 +2,7 @@ package pembayaran
 
 import (
 	"database/sql"
+	"fmt"
 
 	sq "github.com/Masterminds/squirrel"
 )
@@ -58,6 +59,8 @@ type Pembayaran struct {
 type TagihanListParams struct {
 	Page       int
 	Limit      int
+	Sort       string
+	Order      string
 	SiswaID    int64
 	KategoriID int64
 	Status     string
@@ -66,6 +69,8 @@ type TagihanListParams struct {
 type PembayaranListParams struct {
 	Page      int
 	Limit     int
+	Sort      string
+	Order     string
 	TagihanID int64
 	Status    string
 }
@@ -160,7 +165,7 @@ func (r *Repository) ListTagihan(sekolahID int64, params TagihanListParams) ([]T
 	}
 
 	offset := (params.Page - 1) * params.Limit
-	query = query.OrderBy("created_at DESC").Limit(uint64(params.Limit)).Offset(uint64(offset))
+	query = query.OrderBy(params.Sort + " " + params.Order).Limit(uint64(params.Limit)).Offset(uint64(offset))
 
 	rows, err := query.RunWith(r.db).Query()
 	if err != nil {
@@ -208,16 +213,22 @@ func (r *Repository) CreateTagihan(t *Tagihan) (int64, error) {
 }
 
 func (r *Repository) BulkCreateTagihan(items []*Tagihan) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	for _, t := range items {
 		_, err := sq.Insert("tagihan").
 			Columns("sekolah_id", "siswa_id", "kategori_id", "tahun_ajaran_id", "semester", "nominal", "jatuh_tempo", "catatan").
 			Values(t.SekolahID, t.SiswaID, t.KategoriID, t.TahunAjaranID, t.Semester, t.Nominal, t.JatuhTempo, t.Catatan).
-			RunWith(r.db).Exec()
+			RunWith(tx).Exec()
 		if err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }
 
 func (r *Repository) UpdateTagihan(sekolahID, id int64, t *Tagihan) error {
@@ -280,7 +291,7 @@ func (r *Repository) ListPembayaran(sekolahID int64, params PembayaranListParams
 	}
 
 	offset := (params.Page - 1) * params.Limit
-	query = query.OrderBy("p.created_at DESC").Limit(uint64(params.Limit)).Offset(uint64(offset))
+	query = query.OrderBy("p." + params.Sort + " " + params.Order).Limit(uint64(params.Limit)).Offset(uint64(offset))
 
 	rows, err := query.RunWith(r.db).Query()
 	if err != nil {
@@ -381,4 +392,112 @@ func (r *Repository) GetVerifiedSum(tagihanID int64) (float64, error) {
 		return 0, err
 	}
 	return sum.Float64, nil
+}
+
+func (r *Repository) VerifyPembayaranTx(sekolahID, id, verifiedBy int64) (string, error) {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback()
+
+	var p Pembayaran
+	err = sq.Select("p.id", "p.tagihan_id", "p.siswa_id", "p.jumlah", "p.tanggal",
+		"p.metode", "COALESCE(p.provider,'')", "COALESCE(p.bukti_bayar,'')",
+		"COALESCE(p.payment_gateway_id,'')", "COALESCE(p.rekening_sekolah_id,0)",
+		"p.status", "COALESCE(p.catatan,'')", "COALESCE(p.verified_by,0)",
+		"COALESCE(p.verified_at,'')", "p.created_at").
+		From("pembayaran p").
+		Join("tagihan t ON t.id = p.tagihan_id").
+		Where(sq.Eq{"p.id": id, "t.sekolah_id": sekolahID}).
+		RunWith(tx).QueryRow().
+		Scan(&p.ID, &p.TagihanID, &p.SiswaID, &p.Jumlah, &p.Tanggal,
+			&p.Metode, &p.Provider, &p.BuktiBayar, &p.PaymentGatewayID, &p.RekeningSekolahID,
+			&p.Status, &p.Catatan, &p.VerifiedBy, &p.VerifiedAt, &p.CreatedAt)
+	if err != nil {
+		return "", fmt.Errorf("pembayaran tidak ditemukan")
+	}
+
+	if p.Status != "pending" {
+		return "", fmt.Errorf("pembayaran sudah diproses")
+	}
+
+	var tagihan Tagihan
+	err = sq.Select("id", "sekolah_id", "siswa_id", "kategori_id", "tahun_ajaran_id",
+		"COALESCE(semester,'')", "nominal", "COALESCE(jatuh_tempo,'')", "status",
+		"COALESCE(catatan,'')", "created_at", "updated_at").
+		From("tagihan").
+		Where(sq.Eq{"id": p.TagihanID, "sekolah_id": sekolahID}).
+		RunWith(tx).QueryRow().
+		Scan(&tagihan.ID, &tagihan.SekolahID, &tagihan.SiswaID, &tagihan.KategoriID, &tagihan.TahunAjaranID,
+			&tagihan.Semester, &tagihan.Nominal, &tagihan.JatuhTempo, &tagihan.Status, &tagihan.Catatan, &tagihan.CreatedAt, &tagihan.UpdatedAt)
+	if err != nil {
+		return "", fmt.Errorf("tagihan tidak ditemukan")
+	}
+
+	var verifiedSum sql.NullFloat64
+	err = sq.Select("COALESCE(SUM(jumlah),0)").
+		From("pembayaran").
+		Where(sq.Eq{"tagihan_id": p.TagihanID, "status": "verified"}).
+		RunWith(tx).QueryRow().Scan(&verifiedSum)
+	if err != nil {
+		return "", err
+	}
+
+	if verifiedSum.Float64+p.Jumlah > tagihan.Nominal {
+		return "", fmt.Errorf("total pembayaran melebihi nominal tagihan")
+	}
+
+	_, err = sq.Update("pembayaran").
+		Set("status", "verified").
+		Set("verified_by", verifiedBy).
+		Set("verified_at", sq.Expr("CURRENT_TIMESTAMP")).
+		Where(sq.Eq{"id": id}).
+		RunWith(tx).Exec()
+	if err != nil {
+		return "", err
+	}
+
+	newSum := verifiedSum.Float64 + p.Jumlah
+	var status string
+	if newSum >= tagihan.Nominal {
+		status = "lunas"
+	} else if newSum > 0 {
+		status = "sebagian"
+	} else {
+		status = "belum_bayar"
+	}
+
+	_, err = sq.Update("tagihan").
+		Set("status", status).
+		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
+		Where(sq.Eq{"id": p.TagihanID, "sekolah_id": sekolahID}).
+		RunWith(tx).Exec()
+	if err != nil {
+		return "", err
+	}
+
+	return status, tx.Commit()
+}
+
+func (r *Repository) SiswaExistsInSekolah(sekolahID, siswaID int64) bool {
+	var count int
+	err := sq.Select("COUNT(*)").From("siswa").
+		Where(sq.Eq{"id": siswaID, "sekolah_id": sekolahID}).
+		RunWith(r.db).QueryRow().Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
+}
+
+func (r *Repository) KategoriExistsInSekolah(sekolahID, kategoriID int64) bool {
+	var count int
+	err := sq.Select("COUNT(*)").From("kategori_pembayaran").
+		Where(sq.Eq{"id": kategoriID, "sekolah_id": sekolahID}).
+		RunWith(r.db).QueryRow().Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
 }

@@ -150,6 +150,13 @@ func (s *Service) CreateTagihan(sekolahID int64, req CreateTagihanRequest) (*Tag
 		return nil, errs
 	}
 
+	if !s.repo.SiswaExistsInSekolah(sekolahID, req.SiswaID) {
+		return nil, fmt.Errorf("siswa tidak ditemukan")
+	}
+	if !s.repo.KategoriExistsInSekolah(sekolahID, req.KategoriID) {
+		return nil, fmt.Errorf("kategori tidak ditemukan")
+	}
+
 	t := &Tagihan{
 		SekolahID:     sekolahID,
 		SiswaID:       req.SiswaID,
@@ -183,6 +190,15 @@ func (s *Service) BulkCreateTagihan(sekolahID int64, req BulkCreateTagihanReques
 		return validator.ValidationErrors{{Field: "nominal", Message: "harus lebih dari 0"}}
 	}
 
+	if !s.repo.KategoriExistsInSekolah(sekolahID, req.KategoriID) {
+		return fmt.Errorf("kategori tidak ditemukan")
+	}
+	for _, siswaID := range req.SiswaIDs {
+		if !s.repo.SiswaExistsInSekolah(sekolahID, siswaID) {
+			return fmt.Errorf("siswa dengan ID %d tidak ditemukan", siswaID)
+		}
+	}
+
 	var items []*Tagihan
 	for _, siswaID := range req.SiswaIDs {
 		items = append(items, &Tagihan{
@@ -209,6 +225,21 @@ func (s *Service) UpdateTagihan(sekolahID, id int64, req UpdateTagihanRequest) (
 	}
 	if req.Nominal <= 0 {
 		return nil, validator.ValidationErrors{{Field: "nominal", Message: "harus lebih dari 0"}}
+	}
+
+	existing, err := s.repo.GetTagihanByID(sekolahID, id)
+	if err != nil {
+		return nil, fmt.Errorf("tagihan tidak ditemukan")
+	}
+
+	if req.Nominal != existing.Nominal {
+		verifiedSum, err := s.repo.GetVerifiedSum(id)
+		if err != nil {
+			return nil, fmt.Errorf("gagal cek total pembayaran: %w", err)
+		}
+		if verifiedSum > req.Nominal {
+			return nil, validator.ValidationErrors{{Field: "nominal", Message: "nominal tidak boleh kurang dari total pembayaran terverifikasi"}}
+		}
 	}
 
 	t := &Tagihan{
@@ -266,6 +297,15 @@ func (s *Service) CreatePembayaran(sekolahID int64, req CreatePembayaranRequest)
 		return nil, errs
 	}
 
+	tagihan, err := s.repo.GetTagihanByID(sekolahID, req.TagihanID)
+	if err != nil {
+		return nil, fmt.Errorf("tagihan tidak ditemukan")
+	}
+
+	if tagihan.SiswaID != req.SiswaID {
+		return nil, fmt.Errorf("siswa tidak sesuai dengan tagihan")
+	}
+
 	p := &Pembayaran{
 		TagihanID:         req.TagihanID,
 		SiswaID:           req.SiswaID,
@@ -288,40 +328,11 @@ func (s *Service) CreatePembayaran(sekolahID int64, req CreatePembayaranRequest)
 }
 
 func (s *Service) VerifyPembayaran(sekolahID, id, verifiedBy int64) error {
-	p, err := s.repo.GetPembayaranByID(sekolahID, id)
+	_, err := s.repo.VerifyPembayaranTx(sekolahID, id, verifiedBy)
 	if err != nil {
-		return fmt.Errorf("pembayaran tidak ditemukan")
+		return err
 	}
-
-	tagihan, err := s.repo.GetTagihanByID(sekolahID, p.TagihanID)
-	if err != nil {
-		return fmt.Errorf("tagihan tidak ditemukan")
-	}
-
-	verifiedSum, err := s.repo.GetVerifiedSum(p.TagihanID)
-	if err != nil {
-		return fmt.Errorf("gagal cek total pembayaran: %w", err)
-	}
-
-	if verifiedSum+p.Jumlah > tagihan.Nominal {
-		return validator.ValidationErrors{{Field: "jumlah", Message: "total pembayaran melebihi nominal tagihan"}}
-	}
-
-	if err := s.repo.VerifyPembayaran(sekolahID, id, verifiedBy); err != nil {
-		return fmt.Errorf("verify pembayaran: %w", err)
-	}
-
-	newSum := verifiedSum + p.Jumlah
-	var status string
-	if newSum >= tagihan.Nominal {
-		status = "lunas"
-	} else if newSum > 0 {
-		status = "sebagian"
-	} else {
-		status = "belum_bayar"
-	}
-
-	return s.repo.UpdateTagihanStatus(sekolahID, p.TagihanID, status)
+	return nil
 }
 
 func (s *Service) RejectPembayaran(sekolahID, id int64) error {

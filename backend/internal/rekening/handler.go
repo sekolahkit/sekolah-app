@@ -141,7 +141,8 @@ func parseListParams(r *http.Request) ListParams {
 		limit = 20
 	}
 	sort := r.URL.Query().Get("sort")
-	if sort == "" {
+	allowedSorts := map[string]bool{"nama_bank": true, "created_at": true, "urutan": true}
+	if !allowedSorts[sort] {
 		sort = "created_at"
 	}
 	order := r.URL.Query().Get("order")

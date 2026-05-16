@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -110,7 +111,9 @@ func (s *Service) Refresh(refreshTokenRaw, userAgent string) (*LoginResponse, er
 	}
 
 	if rt.RevokedAt.Valid {
-		s.repo.RevokeAllUserTokens(rt.PenggunaID)
+		if err := s.repo.RevokeAllUserTokens(rt.PenggunaID); err != nil {
+			slog.Error("failed to revoke all tokens", "pengguna_id", rt.PenggunaID, "error", err)
+		}
 		return nil, fmt.Errorf("refresh token sudah digunakan, semua session di-revoke")
 	}
 

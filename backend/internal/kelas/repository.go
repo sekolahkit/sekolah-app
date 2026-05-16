@@ -161,6 +161,17 @@ func (r *Repository) ListSiswa(kelasID int64) ([]int64, error) {
 	return ids, nil
 }
 
+func (r *Repository) SiswaExistsInSekolah(sekolahID, siswaID int64) bool {
+	var count int
+	err := sq.Select("COUNT(*)").From("siswa").
+		Where(sq.Eq{"id": siswaID, "sekolah_id": sekolahID}).
+		RunWith(r.db).QueryRow().Scan(&count)
+	if err != nil {
+		return false
+	}
+	return count > 0
+}
+
 func (r *Repository) SiswaInKelas(kelasID, siswaID int64) (bool, error) {
 	var count int
 	err := sq.Select("COUNT(*)").From("kelas_siswa").Where(sq.Eq{"kelas_id": kelasID, "siswa_id": siswaID}).RunWith(r.db).QueryRow().Scan(&count)

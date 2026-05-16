@@ -337,11 +337,22 @@ func parseTagihanListParams(r *http.Request) TagihanListParams {
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
+	sort := r.URL.Query().Get("sort")
+	allowedSorts := map[string]bool{"nominal": true, "jatuh_tempo": true, "status": true, "created_at": true}
+	if !allowedSorts[sort] {
+		sort = "created_at"
+	}
+	order := r.URL.Query().Get("order")
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
 	siswaID, _ := strconv.ParseInt(r.URL.Query().Get("siswa_id"), 10, 64)
 	kategoriID, _ := strconv.ParseInt(r.URL.Query().Get("kategori_id"), 10, 64)
 	return TagihanListParams{
 		Page:       page,
 		Limit:      limit,
+		Sort:       sort,
+		Order:      order,
 		SiswaID:    siswaID,
 		KategoriID: kategoriID,
 		Status:     r.URL.Query().Get("status"),
@@ -357,10 +368,21 @@ func parsePembayaranListParams(r *http.Request) PembayaranListParams {
 	if limit < 1 || limit > 100 {
 		limit = 20
 	}
+	sort := r.URL.Query().Get("sort")
+	allowedSorts := map[string]bool{"jumlah": true, "tanggal": true, "status": true, "created_at": true}
+	if !allowedSorts[sort] {
+		sort = "created_at"
+	}
+	order := r.URL.Query().Get("order")
+	if order != "asc" && order != "desc" {
+		order = "desc"
+	}
 	tagihanID, _ := strconv.ParseInt(r.URL.Query().Get("tagihan_id"), 10, 64)
 	return PembayaranListParams{
 		Page:      page,
 		Limit:     limit,
+		Sort:      sort,
+		Order:     order,
 		TagihanID: tagihanID,
 		Status:    r.URL.Query().Get("status"),
 	}

@@ -46,11 +46,32 @@ func Auth(jwtSecret string) func(http.Handler) http.Handler {
 				return
 			}
 
+			userIDFloat, ok := claims["user_id"].(float64)
+			if !ok {
+				response.Error(w, 401, "UNAUTHORIZED", "Token tidak valid")
+				return
+			}
+			sekolahIDFloat, ok := claims["sekolah_id"].(float64)
+			if !ok {
+				response.Error(w, 401, "UNAUTHORIZED", "Token tidak valid")
+				return
+			}
+			role, ok := claims["role"].(string)
+			if !ok {
+				response.Error(w, 401, "UNAUTHORIZED", "Token tidak valid")
+				return
+			}
+			email, ok := claims["email"].(string)
+			if !ok {
+				response.Error(w, 401, "UNAUTHORIZED", "Token tidak valid")
+				return
+			}
+
 			user := &UserClaims{
-				UserID:    int64(claims["user_id"].(float64)),
-				SekolahID: int64(claims["sekolah_id"].(float64)),
-				Role:      claims["role"].(string),
-				Email:     claims["email"].(string),
+				UserID:    int64(userIDFloat),
+				SekolahID: int64(sekolahIDFloat),
+				Role:      role,
+				Email:     email,
 			}
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
