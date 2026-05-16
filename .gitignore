@@ -1,5 +1,6 @@
 # Binary
 sekolah-app
+backend/server
 *.exe
 *.test
 *.out

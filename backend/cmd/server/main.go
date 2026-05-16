@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"github.com/Sekolahkit/sekolah-app/internal/auth"
 	"github.com/Sekolahkit/sekolah-app/internal/kelas"
@@ -76,6 +80,8 @@ func main() {
 		MaxAge:           300,
 	}))
 	r.Use(mw.RateLimit(cfg.RateLimit.API))
+
+	workerCtx, workerCancel := context.WithCancel(context.Background())
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -256,6 +262,25 @@ func main() {
 		notifService := notifikasi.NewService(notifRepo)
 		notifHandler := notifikasi.NewHandler(notifService)
 
+		registry := notifikasi.NewRegistry()
+		if cfg.Notifikasi.WhatsApp {
+			registry.Register(notifikasi.NewWhatsAppProvider())
+		}
+		if cfg.Notifikasi.Email {
+			registry.Register(notifikasi.NewEmailProvider(notifikasi.EmailConfig{
+				Host:     secrets.SMTPHost,
+				Port:     secrets.SMTPPort,
+				User:     secrets.SMTPUser,
+				Password: secrets.SMTPPassword,
+			}))
+		}
+		if cfg.Notifikasi.Telegram {
+			registry.Register(notifikasi.NewTelegramProvider(secrets.TelegramBotToken))
+		}
+
+		worker := notifikasi.NewWorker(notifRepo, registry, notifikasi.DefaultWorkerConfig())
+		go worker.Start(workerCtx)
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Use(mw.RequireRole("admin"))
@@ -303,9 +328,33 @@ func main() {
 	}
 
 	addr := fmt.Sprintf(":%d", cfg.App.Port)
-	slog.Info("server listening", "addr", addr)
-	if err := http.ListenAndServe(addr, r); err != nil {
-		slog.Error("server error", "error", err)
-		os.Exit(1)
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
 	}
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	go func() {
+		slog.Info("server listening", "addr", addr)
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			slog.Error("server error", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	<-quit
+	slog.Info("shutting down...")
+
+	workerCancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer shutdownCancel()
+
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		slog.Error("server forced shutdown", "error", err)
+	}
+
+	slog.Info("server exited")
 }
