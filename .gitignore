@@ -1,0 +1,45 @@
+# Binary
+sekolah-app
+*.exe
+*.test
+*.out
+coverage.out
+
+# Data
+data/
+uploads/
+backups/
+logs/
+*.db
+*.db-*
+*.sqlite
+*.sqlite3
+
+# Secrets / local config
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+config.yaml
+backend/config.yaml
+
+# Node / frontend
+node_modules/
+dist/
+build/
+coverage/
+.vite/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Go
+vendor/
