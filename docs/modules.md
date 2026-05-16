@@ -220,6 +220,61 @@ Tagihan: SPP Januari = Rp 500.000
 8. [Opsional] Pendaftar diterima → daftar ulang + bayar
 ```
 
+### Perankingan
+
+Modul perankingan bersifat opsional dan bisa dikonfigurasi per sekolah. Admin memilih metode ranking saat setup PPDB.
+
+#### Metode Ranking
+
+| Metode | Keterangan | Cocok Untuk |
+|--------|------------|-------------|
+| Nilai Ujian | Ranking berdasarkan total/rata-rata nilai ujian | SMP, SMA, SMK |
+| Zonasi | Ranking berdasarkan jarak rumah ke sekolah | SD, SMP (Permendikbud) |
+| Kombinasi | Bobot nilai ujian + bobot zonasi | SMP, SMA |
+| Manual | Admin tentukan ranking manual | Sekolah swasta |
+
+#### Konfigurasi Bobot (Metode Kombinasi)
+
+```yaml
+ppdb:
+  ranking:
+    metode: "kombinasi"
+    bobot:
+      nilai_ujian: 60        # 60%
+      zonasi: 30             # 30%
+      prestasi: 10           # 10%
+    kuota: 200               # Jumlah yang diterima
+    cadangan: 20             # Jumlah cadangan
+```
+
+#### Algoritma Ranking
+
+```
+1. Hitung skor per pendaftar:
+   skor = (nilai_ujian_normalized * bobot_ujian) +
+          (skor_zonasi * bobot_zonasi) +
+          (skor_prestasi * bobot_prestasi)
+
+2. Urutkan pendaftar berdasarkan skor (descending)
+
+3. Tentukan status:
+   - Ranking 1 s/d kuota → diterima
+   - Ranking kuota+1 s/d kuota+cadangan → cadangan
+   - Sisanya → tidak_diterima
+```
+
+#### Perhitungan Skor Zonasi
+
+| Jarak dari Sekolah | Skor |
+|--------------------|------|
+| 0 - 1 km | 100 |
+| 1 - 3 km | 80 |
+| 3 - 5 km | 60 |
+| 5 - 10 km | 40 |
+| > 10 km | 20 |
+
+Jarak dihitung berdasarkan koordinat alamat pendaftar (opsional, bisa input manual oleh admin).
+
 ### Form Pendaftaran
 - Nama lengkap
 - NIK

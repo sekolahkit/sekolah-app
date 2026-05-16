@@ -8,14 +8,14 @@ Database menggunakan SQLite. Setiap instalasi memiliki satu file database `sekol
 
 ```
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   sekolahs   │────<│    users      │     │  tahun_     │
-│              │     │              │     │  ajarans    │
+│   sekolah    │────<│   pengguna   │     │  tahun_     │
+│              │     │              │     │  ajaran     │
 └─────────────┘     └──────────────┘     └─────────────┘
        │                    │                    │
        │                    │                    │
        ▼                    ▼                    ▼
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│   kelass     │────<│ kelas_siswas │>────│   siswas    │
+│   kelas      │────<│ kelas_siswa  │>────│   siswa     │
 │              │     │              │     │             │
 └─────────────┘     └──────────────┘     └─────────────┘
                                                 │
@@ -24,32 +24,39 @@ Database menggunakan SQLite. Setiap instalasi memiliki satu file database `sekol
        │
        ▼
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│  tagihans    │────<│ pembayarans  │     │ kategori_   │
-│              │     │              │     │ pembayarans │
+│  tagihan     │────<│  pembayaran  │     │ kategori_   │
+│              │     │              │     │ pembayaran  │
 └─────────────┘     └──────────────┘     └─────────────┘
        │
        │
        ▼
 ┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│ ppdb_        │────<│ ppdb_berkas  │     │ ppdb_ujians │
-│ pendaftarans │     │              │     │             │
+│ ppdb_        │────<│ ppdb_berkas  │     │ ppdb_ujian  │
+│ pendaftaran  │     │              │     │             │
 └─────────────┘     └──────────────┘     └─────────────┘
        │
        │
        ▼
 ┌─────────────┐     ┌──────────────┐
 │ ppdb_        │     │ notifikasi_  │
-│ pengumuman   │     │ queue        │
+│ pengumuman   │     │ antrian      │
 └─────────────┘     └──────────────┘
 ```
 
+## Konvensi Penamaan
+
+- Nama tabel: bahasa Indonesia, singular, snake_case
+- Nama kolom: bahasa Indonesia, snake_case
+- Foreign key: `<tabel_referensi>_id`
+- Tabel penghubung: `<tabel1>_<tabel2>` (contoh: `kelas_siswa`)
+
 ## Tabel-tabel
 
-### sekolahs
+### sekolah
 Tabel utama untuk data sekolah.
 
 ```sql
-CREATE TABLE sekolahs (
+CREATE TABLE sekolah (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT NOT NULL,
     alamat TEXT,
@@ -64,11 +71,11 @@ CREATE TABLE sekolahs (
 );
 ```
 
-### users
+### pengguna
 Tabel pengguna sistem dengan role-based access.
 
 ```sql
-CREATE TABLE users (
+CREATE TABLE pengguna (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     email TEXT NOT NULL UNIQUE,
@@ -81,15 +88,15 @@ CREATE TABLE users (
     aktif BOOLEAN DEFAULT TRUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
-### tahun_ajarans
+### tahun_ajaran
 Tabel tahun ajaran. Terpisah dari semester.
 
 ```sql
-CREATE TABLE tahun_ajarans (
+CREATE TABLE tahun_ajaran (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     nama TEXT NOT NULL,            -- "2024/2025"
@@ -97,52 +104,52 @@ CREATE TABLE tahun_ajarans (
     tanggal_mulai DATE,
     tanggal_selesai DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
-### kelass
+### kelas
 Tabel kelas dengan tingkat SD 1-6, SMP 7-9, SMA/SMK 10-12.
 
 ```sql
-CREATE TABLE kelass (
+CREATE TABLE kelas (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     nama TEXT NOT NULL,            -- "7A", "X TKJ 1"
     tingkat INTEGER NOT NULL,      -- 1-12
     jurusan_id INTEGER,            -- opsional, untuk SMK
-    wali_kelas_id INTEGER,         -- referensi ke users
+    wali_kelas_id INTEGER,         -- referensi ke pengguna
     ruangan TEXT,
     kapasitas INTEGER,
     shift TEXT,                    -- "pagi", "sore"
     tahun_ajaran_id INTEGER NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id),
-    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajarans(id),
-    FOREIGN KEY (wali_kelas_id) REFERENCES users(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id),
+    FOREIGN KEY (wali_kelas_id) REFERENCES pengguna(id)
 );
 ```
 
-### jurusans
+### jurusan
 Tabel jurusan untuk SMK.
 
 ```sql
-CREATE TABLE jurusans (
+CREATE TABLE jurusan (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     nama TEXT NOT NULL,            -- "TKJ", "RPL", "Akuntansi"
     kode TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
-### siswas
+### siswa
 Tabel data siswa. Tidak punya kelas_id langsung (gunakan tabel penghubung).
 
 ```sql
-CREATE TABLE siswas (
+CREATE TABLE siswa (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     nis TEXT NOT NULL UNIQUE,
@@ -162,46 +169,46 @@ CREATE TABLE siswas (
     status TEXT DEFAULT 'aktif',   -- aktif, lulus, pindah, keluar
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
-### kelas_siswas
+### kelas_siswa
 Tabel penghubung siswa dan kelas per tahun ajaran. Mendukung tracking mutasi.
 
 ```sql
-CREATE TABLE kelas_siswas (
+CREATE TABLE kelas_siswa (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     siswa_id INTEGER NOT NULL,
     kelas_id INTEGER NOT NULL,
     tahun_ajaran_id INTEGER NOT NULL,
     status TEXT DEFAULT 'aktif',   -- aktif, lulus, pindah, keluar
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (siswa_id) REFERENCES siswas(id),
-    FOREIGN KEY (kelas_id) REFERENCES kelass(id),
-    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajarans(id)
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (kelas_id) REFERENCES kelas(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id)
 );
 ```
 
-### kategori_pembayarans
+### kategori_pembayaran
 Kategori pembayaran yang bisa dikustomisasi per sekolah.
 
 ```sql
-CREATE TABLE kategori_pembayarans (
+CREATE TABLE kategori_pembayaran (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     nama TEXT NOT NULL,            -- "SPP", "Uang Pangkal", "Seragam"
     deskripsi TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
-### tagihans
+### tagihan
 Tabel tagihan per siswa. Support cicilan (banyak pembayaran per tagihan).
 
 ```sql
-CREATE TABLE tagihans (
+CREATE TABLE tagihan (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     siswa_id INTEGER NOT NULL,
@@ -214,18 +221,18 @@ CREATE TABLE tagihans (
     catatan TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id),
-    FOREIGN KEY (siswa_id) REFERENCES siswas(id),
-    FOREIGN KEY (kategori_id) REFERENCES kategori_pembayarans(id),
-    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajarans(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (kategori_id) REFERENCES kategori_pembayaran(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id)
 );
 ```
 
-### pembayarans
+### pembayaran
 Tabel pembayaran/cicilan per tagihan.
 
 ```sql
-CREATE TABLE pembayarans (
+CREATE TABLE pembayaran (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     tagihan_id INTEGER NOT NULL,
     siswa_id INTEGER NOT NULL,
@@ -236,20 +243,20 @@ CREATE TABLE pembayarans (
     payment_gateway_id TEXT,       -- ID dari payment gateway
     status TEXT DEFAULT 'pending', -- pending, verified, rejected
     catatan TEXT,
-    verified_by INTEGER,           -- user ID yang verifikasi
+    verified_by INTEGER,           -- pengguna ID yang verifikasi
     verified_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (tagihan_id) REFERENCES tagihans(id),
-    FOREIGN KEY (siswa_id) REFERENCES siswas(id),
-    FOREIGN KEY (verified_by) REFERENCES users(id)
+    FOREIGN KEY (tagihan_id) REFERENCES tagihan(id),
+    FOREIGN KEY (siswa_id) REFERENCES siswa(id),
+    FOREIGN KEY (verified_by) REFERENCES pengguna(id)
 );
 ```
 
-### ppdb_pendaftarans
+### ppdb_pendaftaran
 Tabel pendaftar PPDB.
 
 ```sql
-CREATE TABLE ppdb_pendaftarans (
+CREATE TABLE ppdb_pendaftaran (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     tahun_ajaran_id INTEGER NOT NULL,
@@ -273,8 +280,8 @@ CREATE TABLE ppdb_pendaftarans (
     catatan TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id),
-    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajarans(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id)
 );
 ```
 
@@ -291,22 +298,22 @@ CREATE TABLE ppdb_berkas (
     status TEXT DEFAULT 'pending', -- pending, diterima, ditolak
     catatan TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftarans(id)
+    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftaran(id)
 );
 ```
 
-### ppdb_ujians
+### ppdb_ujian
 Tabel nilai ujian PPDB (modul opsional).
 
 ```sql
-CREATE TABLE ppdb_ujians (
+CREATE TABLE ppdb_ujian (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     pendaftaran_id INTEGER NOT NULL,
     nama_ujian TEXT NOT NULL,
     nilai DECIMAL(5,2),
     keterangan TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftarans(id)
+    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftaran(id)
 );
 ```
 
@@ -322,15 +329,15 @@ CREATE TABLE ppdb_pengumuman (
     keterangan TEXT,
     tanggal_pengumuman DATE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftarans(id)
+    FOREIGN KEY (pendaftaran_id) REFERENCES ppdb_pendaftaran(id)
 );
 ```
 
-### notifikasi_queue
+### notifikasi_antrian
 Tabel antrian notifikasi untuk retry.
 
 ```sql
-CREATE TABLE notifikasi_queue (
+CREATE TABLE notifikasi_antrian (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
     tipe TEXT NOT NULL,            -- whatsapp, telegram, email
@@ -343,7 +350,7 @@ CREATE TABLE notifikasi_queue (
     scheduled_at DATETIME,
     sent_at DATETIME,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolahs(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
@@ -399,3 +406,59 @@ CREATE TABLE schema_migrations (
 | `guru` | Akses terbatas |
 | `siswa` | Akses data sendiri |
 | `orangtua` | Akses data anak |
+
+---
+
+## Indexes
+
+Index yang direkomendasikan untuk performa query optimal:
+
+```sql
+-- pengguna
+CREATE INDEX idx_pengguna_sekolah_id ON pengguna(sekolah_id);
+CREATE INDEX idx_pengguna_email ON pengguna(email);
+CREATE INDEX idx_pengguna_role ON pengguna(role);
+CREATE INDEX idx_pengguna_google_id ON pengguna(google_id);
+
+-- siswa
+CREATE INDEX idx_siswa_sekolah_id ON siswa(sekolah_id);
+CREATE INDEX idx_siswa_nis ON siswa(nis);
+CREATE INDEX idx_siswa_nama ON siswa(nama);
+CREATE INDEX idx_siswa_status ON siswa(status);
+
+-- kelas
+CREATE INDEX idx_kelas_sekolah_id ON kelas(sekolah_id);
+CREATE INDEX idx_kelas_tahun_ajaran_id ON kelas(tahun_ajaran_id);
+CREATE INDEX idx_kelas_wali_kelas_id ON kelas(wali_kelas_id);
+
+-- kelas_siswa
+CREATE INDEX idx_kelas_siswa_siswa_id ON kelas_siswa(siswa_id);
+CREATE INDEX idx_kelas_siswa_kelas_id ON kelas_siswa(kelas_id);
+CREATE INDEX idx_kelas_siswa_tahun_ajaran_id ON kelas_siswa(tahun_ajaran_id);
+CREATE UNIQUE INDEX idx_kelas_siswa_unique ON kelas_siswa(siswa_id, kelas_id, tahun_ajaran_id);
+
+-- tagihan
+CREATE INDEX idx_tagihan_siswa_id ON tagihan(siswa_id);
+CREATE INDEX idx_tagihan_status ON tagihan(status);
+CREATE INDEX idx_tagihan_jatuh_tempo ON tagihan(jatuh_tempo);
+CREATE INDEX idx_tagihan_tahun_ajaran_id ON tagihan(tahun_ajaran_id);
+CREATE INDEX idx_tagihan_kategori_id ON tagihan(kategori_id);
+
+-- pembayaran
+CREATE INDEX idx_pembayaran_tagihan_id ON pembayaran(tagihan_id);
+CREATE INDEX idx_pembayaran_siswa_id ON pembayaran(siswa_id);
+CREATE INDEX idx_pembayaran_status ON pembayaran(status);
+CREATE INDEX idx_pembayaran_tanggal ON pembayaran(tanggal);
+
+-- ppdb_pendaftaran
+CREATE INDEX idx_ppdb_pendaftaran_sekolah_id ON ppdb_pendaftaran(sekolah_id);
+CREATE INDEX idx_ppdb_pendaftaran_tahun_ajaran_id ON ppdb_pendaftaran(tahun_ajaran_id);
+CREATE INDEX idx_ppdb_pendaftaran_status ON ppdb_pendaftaran(status);
+
+-- ppdb_berkas
+CREATE INDEX idx_ppdb_berkas_pendaftaran_id ON ppdb_berkas(pendaftaran_id);
+
+-- notifikasi_antrian
+CREATE INDEX idx_notifikasi_antrian_status ON notifikasi_antrian(status);
+CREATE INDEX idx_notifikasi_antrian_scheduled_at ON notifikasi_antrian(scheduled_at);
+```

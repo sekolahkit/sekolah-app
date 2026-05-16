@@ -110,6 +110,67 @@ Selain file `.env`, bisa juga pakai environment variables:
 
 ---
 
+## Validasi Konfigurasi
+
+Aplikasi memvalidasi semua konfigurasi saat startup. Jika ada konfigurasi yang invalid atau wajib tapi kosong, aplikasi akan gagal start dengan pesan error yang jelas.
+
+### Validasi Wajib
+
+| Konfigurasi | Validasi | Aksi Jika Invalid |
+|-------------|----------|-------------------|
+| `JWT_SECRET` | Minimal 32 karakter | Gagal start |
+| `database.path` | Path harus writable | Gagal start |
+| `app.port` | Angka 1-65535 | Gagal start |
+| `backup.schedule` | Format cron valid | Warning, backup dinonaktifkan |
+| `upload.max_size` | Angka positif | Default ke 5 MB |
+| `rate_limit.*` | Angka positif | Default ke nilai bawaan |
+
+### Validasi Opsional
+
+Konfigurasi opsional hanya divalidasi jika modul terkait aktif:
+
+| Modul | Konfigurasi | Validasi |
+|-------|-------------|----------|
+| Notifikasi WhatsApp | `notifikasi.whatsapp: true` | Cek file session `data/whatsapp.db` |
+| Notifikasi Telegram | `TELEGRAM_BOT_TOKEN` | Format token valid |
+| Notifikasi Email | `SMTP_HOST`, `SMTP_PORT` | Wajib jika email aktif |
+| Payment Midtrans | `MIDTRANS_SERVER_KEY` | Wajib jika midtrans aktif |
+| Payment Xendit | `XENDIT_SECRET_KEY` | Wajib jika xendit aktif |
+| Google OAuth | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | Wajib jika Google login aktif |
+
+### Perilaku Startup
+
+```
+1. Load config.yaml
+2. Load .env (override environment variables)
+3. Validasi konfigurasi wajib
+   → Jika gagal: log error + exit code 1
+4. Validasi konfigurasi opsional (per modul aktif)
+   → Jika gagal: log warning + nonaktifkan modul terkait
+5. Tampilkan ringkasan konfigurasi di log:
+   - Port
+   - Modul aktif
+   - Notifikasi aktif
+   - Payment gateway aktif
+6. Lanjut ke migration & serve
+```
+
+### Contoh Output Startup
+
+```
+INFO  SekolahApp v1.2.0 starting...
+INFO  Config loaded from ./config.yaml
+INFO  Database: ./data/sekolah.db
+INFO  Modules: pembayaran=ON, ppdb=ON, notifikasi=ON
+INFO  Notifikasi: whatsapp=ON, telegram=OFF, email=ON
+WARN  Telegram dinonaktifkan: TELEGRAM_BOT_TOKEN kosong
+INFO  Payment: midtrans=OFF, xendit=OFF
+INFO  Backup: ON (schedule: 0 2 * * *, retention: 7 hari)
+INFO  Server listening on :8080
+```
+
+---
+
 ## Konfigurasi WhatsApp
 
 ### Setup whatsmeow

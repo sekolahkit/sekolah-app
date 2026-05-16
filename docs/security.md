@@ -31,6 +31,33 @@ Aplikasi menggunakan beberapa lapisan keamanan untuk melindungi data sekolah.
 - Harus mengandung huruf dan angka
 - Disimpan dengan bcrypt (salt otomatis)
 
+### Token Refresh
+
+JWT access token memiliki masa berlaku pendek (15 menit). Untuk menjaga session tanpa login ulang:
+
+```
+1. Login → dapat access token (15 menit) + refresh token (7 hari)
+2. Access token expired → frontend kirim refresh token
+3. Backend validasi refresh token
+4. Generate access token baru
+5. Jika refresh token expired → user harus login ulang
+```
+
+Refresh token disimpan di database dan bisa di-revoke oleh admin.
+
+### Account Lockout
+
+Setelah beberapa kali gagal login, akun akan dikunci sementara:
+
+| Percobaan Gagal | Aksi |
+|-----------------|------|
+| 3x | Delay 30 detik |
+| 5x | Lockout 5 menit |
+| 10x | Lockout 30 menit |
+| 15x | Lockout permanen (perlu reset admin) |
+
+Lockout di-track per email, bukan per IP, untuk mencegah brute force yang terdistribusi.
+
 ---
 
 ## Otorisasi
@@ -68,6 +95,77 @@ r.Group(func(r chi.Router) {
     r.Get("/siswa", siswaHandler.List)
 })
 ```
+
+---
+
+## CSRF Protection
+
+Karena autentikasi menggunakan httpOnly cookie, aplikasi rentan terhadap CSRF. Proteksi yang diterapkan:
+
+### Double Submit Cookie
+
+```
+1. Backend generate CSRF token saat login
+2. Token dikirim sebagai non-httpOnly cookie (bisa dibaca JS)
+3. Frontend baca token dari cookie
+4. Frontend kirim token di header X-CSRF-Token setiap request mutasi (POST/PUT/DELETE)
+5. Backend bandingkan header dengan cookie
+6. Jika tidak cocok → 403 Forbidden
+```
+
+### Pengecualian CSRF
+
+Endpoint yang tidak perlu CSRF check:
+- `POST /api/v1/payment/callback/*` (validasi via signature dari payment gateway)
+- `POST /api/v1/auth/login` (belum punya cookie)
+- `POST /api/v1/auth/register`
+
+---
+
+## Audit Log
+
+Semua aksi sensitif dicatat di tabel `audit_log` untuk accountability:
+
+### Aksi yang Dicatat
+
+| Kategori | Aksi |
+|----------|------|
+| Auth | Login, logout, failed login, ganti password |
+| Data | Hapus siswa, hapus tagihan, hapus kelas |
+| Pembayaran | Verifikasi, tolak pembayaran |
+| PPDB | Ubah status pendaftar, publish pengumuman |
+| Sistem | Backup, restore, ubah konfigurasi |
+| User | Buat user, ubah role, nonaktifkan user |
+
+### Struktur Audit Log
+
+```sql
+CREATE TABLE audit_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
+    pengguna_id INTEGER,
+    aksi TEXT NOT NULL,
+    tabel TEXT,
+    record_id INTEGER,
+    data_lama TEXT,               -- JSON snapshot sebelum perubahan
+    data_baru TEXT,               -- JSON snapshot setelah perubahan
+    ip_address TEXT,
+    user_agent TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (pengguna_id) REFERENCES pengguna(id)
+);
+
+CREATE INDEX idx_audit_log_pengguna_id ON audit_log(pengguna_id);
+CREATE INDEX idx_audit_log_aksi ON audit_log(aksi);
+CREATE INDEX idx_audit_log_created_at ON audit_log(created_at);
+```
+
+### Retensi
+
+- Default: simpan 90 hari
+- Bisa dikonfigurasi di `config.yaml`
+- Audit log lama dihapus otomatis oleh scheduler
 
 ---
 

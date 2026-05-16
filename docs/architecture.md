@@ -170,3 +170,76 @@ Setiap perubahan schema punya file migration. Bisa upgrade dan rollback.
 
 ### 7. Auto Backup
 Backup otomatis setiap hari, simpan 7 hari terakhir.
+
+---
+
+## Error Handling
+
+### Strategi
+
+Error di-handle secara konsisten di setiap layer dengan prinsip:
+- **Repository layer**: Return error mentah dari database
+- **Service layer**: Wrap error dengan konteks bisnis, buat custom error types
+- **Handler layer**: Translate error ke HTTP response yang sesuai
+
+### Custom Error Types
+
+```go
+type AppError struct {
+    Code    string // VALIDATION_ERROR, NOT_FOUND, FORBIDDEN, dll
+    Message string // Pesan untuk user
+    Err     error  // Original error (tidak di-expose ke client)
+}
+
+type ValidationError struct {
+    Field   string
+    Message string
+}
+```
+
+### Error Flow
+
+```
+Repository → error: "UNIQUE constraint failed: siswa.nis"
+     ↓
+Service → AppError{Code: "DUPLICATE", Message: "NIS sudah terdaftar"}
+     ↓
+Handler → HTTP 422 + JSON {"error": {"code": "DUPLICATE", "message": "NIS sudah terdaftar"}}
+```
+
+### Logging Strategy
+
+| Layer | Yang Di-log |
+|-------|-------------|
+| Handler | Request method, path, status code, duration |
+| Service | Business logic errors, state transitions |
+| Repository | Query errors, slow queries (>100ms) |
+| Adapter | External API calls, responses, timeouts |
+
+Gunakan `slog` dengan structured logging:
+
+```go
+slog.Error("gagal verifikasi pembayaran",
+    "pembayaran_id", id,
+    "error", err,
+    "user_id", userID,
+)
+```
+
+### Panic Recovery
+
+Middleware `recover` menangkap panic agar server tidak crash:
+
+```go
+func RecoverMiddleware(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        defer func() {
+            if err := recover(); err != nil {
+                slog.Error("panic recovered", "error", err, "stack", debug.Stack())
+                respond.Error(w, 500, "INTERNAL_ERROR", "Terjadi kesalahan internal")
+            }
+        }()
+        next.ServeHTTP(w, r)
+    })
+}
+```

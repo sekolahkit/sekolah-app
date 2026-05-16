@@ -242,6 +242,89 @@ tar -xzf /backup/uploads-20240115.tar.gz -C /
 
 ---
 
+## Update & Migration Strategy
+
+### Auto Migration on Startup
+
+Aplikasi menjalankan database migration otomatis saat startup:
+
+```
+1. Aplikasi start
+2. Cek versi schema saat ini (tabel schema_migrations)
+3. Jalankan migration yang belum dieksekusi secara berurutan
+4. Jika migration gagal → aplikasi tidak start, log error
+5. Jika sukses → lanjut serve
+```
+
+### Zero-Downtime Update (Recommended)
+
+Untuk menghindari downtime saat update:
+
+#### Binary Deployment
+
+```bash
+# 1. Download binary baru
+wget -O sekolah-app-new https://github.com/Sekolahkit/sekolah-app/releases/latest/download/sekolah-app-linux-amd64
+chmod +x sekolah-app-new
+
+# 2. Backup database sebelum update
+cp data/sekolah.db data/sekolah-backup-$(date +%Y%m%d%H%M).db
+
+# 3. Stop, swap, start (downtime ~2 detik)
+sudo systemctl stop sekolah-app
+mv sekolah-app-new sekolah-app
+sudo systemctl start sekolah-app
+
+# 4. Verifikasi
+sudo systemctl status sekolah-app
+curl -s http://localhost:8080/api/v1/setup/status
+```
+
+#### Docker Deployment
+
+```bash
+# 1. Backup database
+cp data/sekolah.db data/sekolah-backup-$(date +%Y%m%d%H%M).db
+
+# 2. Pull & recreate (downtime ~3 detik)
+docker-compose pull
+docker-compose up -d
+
+# 3. Verifikasi
+docker-compose logs --tail=20
+curl -s http://localhost:8080/api/v1/setup/status
+```
+
+### Rollback
+
+Jika update gagal atau ada bug:
+
+```bash
+# 1. Stop aplikasi
+sudo systemctl stop sekolah-app
+
+# 2. Restore binary lama
+mv sekolah-app-old sekolah-app
+
+# 3. Restore database (jika migration sudah jalan)
+cp data/sekolah-backup-YYYYMMDD.db data/sekolah.db
+
+# 4. Start ulang
+sudo systemctl start sekolah-app
+```
+
+### Migration Safety Rules
+
+| Rule | Keterangan |
+|------|------------|
+| Additive only | Migration hanya boleh menambah kolom/tabel, tidak menghapus |
+| Default values | Kolom baru harus punya default value |
+| No rename | Jangan rename kolom/tabel di migration (buat kolom baru, copy data, hapus kolom lama di migration berikutnya) |
+| Test dulu | Jalankan migration di staging/backup database sebelum production |
+| Backup wajib | Selalu backup sebelum update |
+
+---
+
 ## Monitoring
 
 ### Cek Status

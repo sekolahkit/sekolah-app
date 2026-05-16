@@ -271,6 +271,57 @@ migrate create -ext sql -dir backend/internal/migration/migrations -seq add_new_
 
 ---
 
+## Architecture Decision Records (ADR)
+
+Setiap keputusan arsitektur penting didokumentasikan sebagai ADR di folder `docs/adr/`.
+
+### Format ADR
+
+```markdown
+# ADR-{nomor}: {judul}
+
+## Status
+Accepted / Deprecated / Superseded by ADR-{nomor}
+
+## Konteks
+Masalah atau kebutuhan yang memicu keputusan ini.
+
+## Keputusan
+Apa yang diputuskan dan mengapa.
+
+## Alternatif yang Dipertimbangkan
+- Opsi A: ...
+- Opsi B: ...
+
+## Konsekuensi
+- Positif: ...
+- Negatif: ...
+- Risiko: ...
+
+## Tanggal
+YYYY-MM-DD
+```
+
+### Contoh ADR yang Sudah Ada
+
+| ADR | Judul | Status |
+|-----|-------|--------|
+| ADR-001 | Gunakan SQLite sebagai database | Accepted |
+| ADR-002 | Embed frontend ke binary Go | Accepted |
+| ADR-003 | Adapter pattern untuk payment gateway | Accepted |
+| ADR-004 | whatsmeow untuk WhatsApp | Accepted |
+| ADR-005 | RBAC dengan role tetap (bukan dynamic permission) | Accepted |
+
+### Kapan Buat ADR Baru
+
+- Menambah/mengganti library utama
+- Mengubah arsitektur (misal: pindah dari SQLite ke PostgreSQL)
+- Menambah integrasi external baru
+- Mengubah strategi autentikasi/otorisasi
+- Keputusan yang akan sulit di-revert
+
+---
+
 ## Community
 
 - **GitHub Issues** — Bug reports & feature requests

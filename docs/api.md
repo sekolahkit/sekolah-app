@@ -10,6 +10,23 @@ API menggunakan REST dengan format JSON. Semua endpoint di-prefix dengan `/api/v
 http://localhost:8080/api/v1
 ```
 
+## Versioning Strategy
+
+API menggunakan URL-based versioning (`/api/v1/`, `/api/v2/`).
+
+| Kebijakan | Keterangan |
+|-----------|------------|
+| Backward compatible | Penambahan field baru di response tidak dianggap breaking change |
+| Deprecation notice | Versi lama akan diberi header `X-API-Deprecated: true` minimal 6 bulan sebelum dihapus |
+| Breaking changes | Perubahan yang menghapus/mengubah field existing → versi baru |
+| Support window | Maksimal 2 versi aktif bersamaan |
+
+Header response untuk versi yang deprecated:
+```
+X-API-Deprecated: true
+X-API-Sunset: 2025-06-01
+```
+
 ## Autentikasi
 
 Sebagian besar endpoint membutuhkan JWT token. Token dikirim via httpOnly cookie.
@@ -275,3 +292,235 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | `POST /auth/register` | 3 request/menit |
 | `POST /ppdb/daftar` | 10 request/menit |
 | Lainnya | 100 request/menit |
+
+---
+
+## Contoh Request & Response
+
+### POST /auth/login
+
+**Request:**
+```json
+{
+    "email": "admin@sekolah.id",
+    "password": "password123"
+}
+```
+
+**Response (200):**
+```json
+{
+    "data": {
+        "id": 1,
+        "nama": "Admin Sekolah",
+        "email": "admin@sekolah.id",
+        "role": "admin",
+        "sekolah_id": 1
+    }
+}
+```
+
+Set-Cookie: `token=eyJhbG...; HttpOnly; Secure; SameSite=Strict; Path=/`
+
+---
+
+### POST /siswa
+
+**Request:**
+```json
+{
+    "nis": "2024001",
+    "nama": "Andi Pratama",
+    "jenis_kelamin": "L",
+    "tempat_lahir": "Jakarta",
+    "tanggal_lahir": "2010-05-15",
+    "agama": "Islam",
+    "alamat": "Jl. Merdeka No. 10",
+    "no_hp": "081234567890",
+    "nama_ortu": "Budi Pratama",
+    "no_hp_ortu": "081298765432"
+}
+```
+
+**Response (201):**
+```json
+{
+    "data": {
+        "id": 42,
+        "nis": "2024001",
+        "nama": "Andi Pratama",
+        "jenis_kelamin": "L",
+        "status": "aktif",
+        "created_at": "2024-07-01T10:00:00Z"
+    }
+}
+```
+
+---
+
+### POST /tagihan/bulk
+
+Buat tagihan massal untuk banyak siswa sekaligus.
+
+**Request:**
+```json
+{
+    "siswa_ids": [1, 2, 3, 4, 5],
+    "kategori_id": 1,
+    "tahun_ajaran_id": 2,
+    "semester": "Ganjil",
+    "nominal": 500000,
+    "jatuh_tempo": "2024-08-15",
+    "catatan": "SPP Bulan Agustus"
+}
+```
+
+**Response (201):**
+```json
+{
+    "data": {
+        "created_count": 5,
+        "tagihan_ids": [101, 102, 103, 104, 105]
+    }
+}
+```
+
+---
+
+### POST /pembayaran
+
+Upload bukti bayar oleh siswa/orangtua.
+
+**Request (multipart/form-data):**
+```
+tagihan_id: 101
+jumlah: 250000
+metode: transfer
+bukti_bayar: [file upload]
+catatan: "Cicilan pertama"
+```
+
+**Response (201):**
+```json
+{
+    "data": {
+        "id": 55,
+        "tagihan_id": 101,
+        "jumlah": 250000,
+        "metode": "transfer",
+        "status": "pending",
+        "created_at": "2024-08-10T14:30:00Z"
+    }
+}
+```
+
+---
+
+### PUT /pembayaran/:id/verify
+
+**Request:**
+```json
+{
+    "catatan": "Bukti transfer valid"
+}
+```
+
+**Response (200):**
+```json
+{
+    "data": {
+        "id": 55,
+        "status": "verified",
+        "verified_by": 1,
+        "verified_at": "2024-08-10T15:00:00Z"
+    }
+}
+```
+
+---
+
+### POST /ppdb/daftar
+
+**Request (multipart/form-data):**
+```
+nama_lengkap: "Siti Nurhaliza"
+nik: "3201234567890001"
+tempat_lahir: "Bandung"
+tanggal_lahir: "2011-03-20"
+jenis_kelamin: "P"
+agama: "Islam"
+alamat: "Jl. Asia Afrika No. 5"
+asal_sekolah: "SD Negeri 1 Bandung"
+no_hp: "081300001111"
+email: "siti@email.com"
+nama_ortu: "Ahmad Nurhaliza"
+no_hp_ortu: "081300002222"
+pekerjaan_ortu: "Wiraswasta"
+foto: [file upload]
+berkas[]: [file upload - ijazah]
+berkas[]: [file upload - akta_lahir]
+berkas[]: [file upload - kk]
+```
+
+**Response (201):**
+```json
+{
+    "data": {
+        "id": 15,
+        "nama_lengkap": "Siti Nurhaliza",
+        "status": "menunggu",
+        "created_at": "2024-06-01T09:00:00Z"
+    }
+}
+```
+
+---
+
+### POST /payment/callback/midtrans
+
+Callback dari Midtrans (server-to-server).
+
+**Request (dari Midtrans):**
+```json
+{
+    "transaction_id": "trx-001",
+    "order_id": "pembayaran-55",
+    "transaction_status": "settlement",
+    "gross_amount": "250000.00",
+    "payment_type": "bank_transfer",
+    "signature_key": "abc123..."
+}
+```
+
+**Response (200):**
+```json
+{
+    "status": "ok"
+}
+```
+
+---
+
+### POST /siswa/import
+
+Import siswa dari file Excel.
+
+**Request (multipart/form-data):**
+```
+file: [file upload - .xlsx]
+```
+
+**Response (200):**
+```json
+{
+    "data": {
+        "total": 50,
+        "berhasil": 48,
+        "gagal": 2,
+        "errors": [
+            {"baris": 12, "pesan": "NIS sudah terdaftar: 2024005"},
+            {"baris": 35, "pesan": "Nama wajib diisi"}
+        ]
+    }
+}
+```
