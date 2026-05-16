@@ -261,6 +261,27 @@ CREATE TABLE kategori_pembayaran (
 );
 ```
 
+### rekening_sekolah
+Tabel rekening bank sekolah untuk tujuan transfer manual.
+
+```sql
+CREATE TABLE rekening_sekolah (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
+    nama_bank TEXT NOT NULL,          -- BCA, BRI, Mandiri, dll
+    nomor_rekening TEXT NOT NULL,
+    nama_pemilik TEXT NOT NULL,       -- atas nama rekening
+    cabang TEXT,
+    aktif BOOLEAN DEFAULT TRUE,
+    urutan INTEGER DEFAULT 0,         -- urutan tampil di halaman bayar
+    catatan TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    UNIQUE(sekolah_id, nama_bank, nomor_rekening)
+);
+```
+
 ### tagihan
 Tabel tagihan per siswa. Support cicilan (banyak pembayaran per tagihan).
 
@@ -299,6 +320,7 @@ CREATE TABLE pembayaran (
     provider TEXT,                  -- midtrans, xendit (NULL jika manual)
     bukti_bayar TEXT,              -- path file
     payment_gateway_id TEXT,       -- ID dari payment gateway (NULL jika manual)
+    rekening_sekolah_id INTEGER,   -- rekening tujuan transfer (NULL jika cash/gateway)
     status TEXT DEFAULT 'pending', -- pending, verified, rejected
     catatan TEXT,
     verified_by INTEGER,           -- pengguna ID yang verifikasi
@@ -307,6 +329,7 @@ CREATE TABLE pembayaran (
     FOREIGN KEY (tagihan_id) REFERENCES tagihan(id),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id),
     FOREIGN KEY (verified_by) REFERENCES pengguna(id),
+    FOREIGN KEY (rekening_sekolah_id) REFERENCES rekening_sekolah(id),
     UNIQUE(provider, payment_gateway_id)
 );
 ```
@@ -538,6 +561,11 @@ CREATE INDEX idx_pembayaran_siswa_id ON pembayaran(siswa_id);
 CREATE INDEX idx_pembayaran_status ON pembayaran(status);
 CREATE INDEX idx_pembayaran_tanggal ON pembayaran(tanggal);
 CREATE UNIQUE INDEX idx_pembayaran_gateway ON pembayaran(provider, payment_gateway_id);
+CREATE INDEX idx_pembayaran_rekening_id ON pembayaran(rekening_sekolah_id);
+
+-- rekening_sekolah
+CREATE INDEX idx_rekening_sekolah_sekolah_id ON rekening_sekolah(sekolah_id);
+CREATE INDEX idx_rekening_sekolah_aktif ON rekening_sekolah(aktif);
 
 -- refresh_token
 CREATE INDEX idx_refresh_token_pengguna_id ON refresh_token(pengguna_id);

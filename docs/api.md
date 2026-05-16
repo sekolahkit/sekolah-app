@@ -170,6 +170,16 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | PUT | `/kategori-pembayaran/:id` | Update kategori | Admin |
 | DELETE | `/kategori-pembayaran/:id` | Hapus kategori | Admin |
 
+### Rekening Sekolah
+
+| Method | Endpoint | Keterangan | Role |
+|--------|----------|------------|------|
+| GET | `/rekening-sekolah` | List semua rekening | Admin, Operator |
+| GET | `/rekening-sekolah/aktif` | List rekening aktif (tampil di halaman bayar) | Auth |
+| POST | `/rekening-sekolah` | Tambah rekening | Admin |
+| PUT | `/rekening-sekolah/:id` | Update rekening | Admin |
+| DELETE | `/rekening-sekolah/:id` | Nonaktifkan rekening (soft delete: aktif=false) | Admin |
+
 ### Tagihan
 
 | Method | Endpoint | Keterangan | Role |
@@ -443,9 +453,12 @@ Upload bukti bayar oleh siswa/orangtua.
 tagihan_id: 101
 jumlah: 250000
 metode: transfer
+rekening_sekolah_id: 2
 bukti_bayar: [file upload]
 catatan: "Cicilan pertama"
 ```
+
+> `rekening_sekolah_id` wajib jika metode=transfer. NULL/tidak dikirim jika metode=cash atau gateway.
 
 **Response (201):**
 ```json
@@ -569,5 +582,64 @@ file: [file upload - .xlsx]
             {"baris": 35, "pesan": "Nama wajib diisi"}
         ]
     }
+}
+```
+
+---
+
+### POST /rekening-sekolah
+
+**Request:**
+```json
+{
+    "nama_bank": "BCA",
+    "nomor_rekening": "1234567890",
+    "nama_pemilik": "SDN 1 Bandung",
+    "cabang": "KCP Dago",
+    "catatan": "Rekening utama SPP"
+}
+```
+
+**Response (201):**
+```json
+{
+    "data": {
+        "id": 2,
+        "nama_bank": "BCA",
+        "nomor_rekening": "1234567890",
+        "nama_pemilik": "SDN 1 Bandung",
+        "cabang": "KCP Dago",
+        "aktif": true,
+        "urutan": 0,
+        "created_at": "2024-07-01T10:00:00Z"
+    }
+}
+```
+
+---
+
+### GET /rekening-sekolah/aktif
+
+List rekening aktif untuk ditampilkan di halaman pembayaran siswa/orangtua.
+
+**Response (200):**
+```json
+{
+    "data": [
+        {
+            "id": 1,
+            "nama_bank": "BRI",
+            "nomor_rekening": "0987654321",
+            "nama_pemilik": "SDN 1 Bandung",
+            "cabang": "KC Bandung"
+        },
+        {
+            "id": 2,
+            "nama_bank": "BCA",
+            "nomor_rekening": "1234567890",
+            "nama_pemilik": "SDN 1 Bandung",
+            "cabang": "KCP Dago"
+        }
+    ]
 }
 ```

@@ -142,11 +142,17 @@ Format kolom Excel untuk import:
 ```
 1. Admin/Operator buat tagihan (per siswa atau massal)
 2. Siswa/Orangtua lihat tagihan
-3. Siswa/Orangtua bayar (transfer/cash)
-4. Siswa/Orangtua upload bukti bayar
-5. Operator verifikasi bukti bayar
-6. Status tagihan otomatis update (belum_bayar → sebagian → lunas)
+3. Sistem tampilkan rekening sekolah aktif (GET /rekening-sekolah/aktif)
+4. Siswa/Orangtua transfer ke salah satu rekening
+5. Siswa/Orangtua upload bukti bayar + pilih rekening tujuan (rekening_sekolah_id)
+6. Operator verifikasi bukti bayar (cross-check dengan rekening tujuan)
+7. Status tagihan otomatis update (belum_bayar → sebagian → lunas)
 ```
+
+Catatan:
+- Metode `cash`: tidak butuh rekening, `rekening_sekolah_id` = NULL
+- Metode `transfer`: wajib pilih rekening tujuan
+- Metode `midtrans`/`xendit`: diproses via gateway, `rekening_sekolah_id` = NULL
 
 ### Alur Payment Gateway
 ```
