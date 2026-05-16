@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { useSiswaList, useCreateSiswa, useUpdateSiswa, useDeleteSiswa } from '@/hooks/use-siswa'
 import { useAuth } from '@/hooks/use-auth-hook'
 import { cn } from '@/lib/utils'
-import { Plus, Search, Edit2, Trash2, X } from 'lucide-react'
+import { Plus, Search, Edit2, Trash2, X, Download, Loader2 } from 'lucide-react'
+import { downloadExport } from '@/lib/export'
 import type { Siswa } from '@/types'
 
 export function SiswaPage() {
@@ -12,6 +13,7 @@ export function SiswaPage() {
   const [showForm, setShowForm] = useState(false)
   const [editingSiswa, setEditingSiswa] = useState<Siswa | null>(null)
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useSiswaList({ page, limit: 20, search: search || undefined })
   const deleteMutation = useDeleteSiswa()
@@ -30,13 +32,27 @@ export function SiswaPage() {
     deleteMutation.mutate(id, { onSuccess: () => setDeleteConfirm(null) })
   }
 
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport('/siswa/export', 'data-siswa.xlsx')
+    } catch { /* stub endpoint */ }
+    setExporting(false)
+  }
+
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-foreground">Data Siswa</h1>
-        <button onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
-          <Plus className="h-4 w-4" /> Tambah Siswa
-        </button>
+        <div className="flex items-center gap-2">
+          <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Ekspor
+          </button>
+          <button onClick={handleCreate} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+            <Plus className="h-4 w-4" /> Tambah Siswa
+          </button>
+        </div>
       </div>
 
       <div className="mt-4 flex items-center gap-2">

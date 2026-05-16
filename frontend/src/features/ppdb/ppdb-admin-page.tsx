@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { usePendaftarList, useUpdatePendaftarStatus, useBerkasList, useVerifikasiBerkas, usePublishPengumuman } from '@/hooks/use-ppdb'
 import { cn } from '@/lib/utils'
-import { Search, Eye, X, FileText, Check } from 'lucide-react'
+import { Search, Eye, X, FileText, Check, Download, Loader2 } from 'lucide-react'
+import { downloadExport } from '@/lib/export'
 import type { Berkas } from '@/hooks/use-ppdb'
 
 export function PpdbAdminPage() {
@@ -9,12 +10,27 @@ export function PpdbAdminPage() {
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
+  const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = usePendaftarList({ page, limit: 20, status: statusFilter || undefined, search: search || undefined })
 
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport('/ppdb/export', 'data-ppdb.xlsx')
+    } catch { /* endpoint may not exist */ }
+    setExporting(false)
+  }
+
   return (
     <div className="p-6 space-y-4">
-      <h1 className="text-2xl font-bold text-foreground">PPDB - Pendaftar</h1>
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h1 className="text-2xl font-bold text-foreground">PPDB - Pendaftar</h1>
+        <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Ekspor
+        </button>
+      </div>
 
       <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-sm">

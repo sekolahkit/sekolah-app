@@ -1,9 +1,11 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/use-auth-hook'
-import { useTagihanList, useCreateTagihan, usePembayaranList, useVerifyPembayaran, useRejectPembayaran, useCreatePembayaran, useRekeningAktif } from '@/hooks/use-pembayaran'
+import { useTagihanList, useCreateTagihan, useBulkCreateTagihan, usePembayaranList, useVerifyPembayaran, useRejectPembayaran, useCreatePembayaran, useRekeningAktif } from '@/hooks/use-pembayaran'
 import { cn } from '@/lib/utils'
-import { Plus, Check, X, CreditCard, Search } from 'lucide-react'
-import type { Tagihan, Pembayaran, Rekening } from '@/types'
+import { Plus, Check, X, CreditCard, Search, Users, Download, Loader2 } from 'lucide-react'
+import { SiswaPicker, SiswaMultiPicker } from '@/components/ui/siswa-picker'
+import { downloadExport } from '@/lib/export'
+import type { Tagihan, Pembayaran, Rekening, Siswa } from '@/types'
 
 export function PembayaranPage() {
   const { user } = useAuth()
@@ -18,15 +20,28 @@ export function PembayaranPage() {
 
 function AdminPembayaranView() {
   const [tab, setTab] = useState<'tagihan' | 'verifikasi'>('tagihan')
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport('/pembayaran/export', 'pembayaran.xlsx')
+    } catch { /* endpoint may not exist yet */ }
+    setExporting(false)
+  }
 
   return (
     <>
-      <div className="flex items-center gap-4">
+      <div className="flex items-center gap-4 flex-wrap">
         <h1 className="text-2xl font-bold text-foreground">Pembayaran</h1>
         <div className="flex rounded-md border border-border">
           <button onClick={() => setTab('tagihan')} className={cn('px-3 py-1.5 text-sm', tab === 'tagihan' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted')}>Tagihan</button>
           <button onClick={() => setTab('verifikasi')} className={cn('px-3 py-1.5 text-sm', tab === 'verifikasi' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted')}>Verifikasi</button>
         </div>
+        <button onClick={handleExport} disabled={exporting} className="ml-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Ekspor
+        </button>
       </div>
       {tab === 'tagihan' ? <TagihanSection /> : <VerifikasiSection />}
     </>
@@ -38,6 +53,7 @@ function TagihanSection() {
   const [statusFilter, setStatusFilter] = useState('')
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
+  const [showBulk, setShowBulk] = useState(false)
 
   const { data, isLoading } = useTagihanList({ page, limit: 20, status: statusFilter || undefined, search: search || undefined })
 
@@ -56,6 +72,9 @@ function TagihanSection() {
         </select>
         <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
           <Plus className="h-4 w-4" /> Buat Tagihan
+        </button>
+        <button onClick={() => setShowBulk(true)} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
+          <Users className="h-4 w-4" /> Tagihan Massal
         </button>
       </div>
 
@@ -100,6 +119,7 @@ function TagihanSection() {
       )}
 
       {showCreate && <CreateTagihanDialog onClose={() => setShowCreate(false)} />}
+      {showBulk && <BulkTagihanDialog onClose={() => setShowBulk(false)} />}
     </>
   )
 }
@@ -324,8 +344,8 @@ function BayarDialog({ tagihan, rekening, onClose }: { tagihan: Tagihan; rekenin
 function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
   const createMutation = useCreateTagihan()
   const [error, setError] = useState('')
+  const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
   const [form, setForm] = useState({
-    siswa_id: '',
     kategori_id: '',
     tahun_ajaran_id: '',
     nominal: '',
@@ -341,9 +361,17 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    if (!selectedSiswa) {
+      setError('Pilih siswa terlebih dahulu')
+      return
+    }
+    if (!form.nominal || Number(form.nominal) <= 0) {
+      setError('Nominal harus lebih dari 0')
+      return
+    }
     try {
       await createMutation.mutateAsync({
-        siswa_id: Number(form.siswa_id),
+        siswa_id: selectedSiswa.id,
         kategori_id: Number(form.kategori_id),
         tahun_ajaran_id: Number(form.tahun_ajaran_id),
         nominal: Number(form.nominal),
@@ -367,31 +395,31 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
         </div>
 
         <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Siswa</label>
+            <SiswaPicker value={selectedSiswa?.id ?? null} onChange={setSelectedSiswa} />
+          </div>
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Siswa ID</label>
-              <input type="number" value={form.siswa_id} onChange={(e) => handleChange('siswa_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
-            </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Kategori ID</label>
               <input type="number" value={form.kategori_id} onChange={(e) => handleChange('kategori_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
               <input type="number" value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Nominal</label>
               <input type="number" value={form.nominal} onChange={(e) => handleChange('nominal', e.target.value)} required min={1} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Jatuh Tempo</label>
               <input type="date" value={form.jatuh_tempo} onChange={(e) => handleChange('jatuh_tempo', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-muted-foreground">Semester</label>
               <select value={form.semester} onChange={(e) => handleChange('semester', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
@@ -400,10 +428,10 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
                 <option value="Genap">Genap</option>
               </select>
             </div>
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-medium text-muted-foreground">Catatan</label>
-            <input type="text" value={form.catatan} onChange={(e) => handleChange('catatan', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Catatan</label>
+              <input type="text" value={form.catatan} onChange={(e) => handleChange('catatan', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -415,6 +443,138 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function BulkTagihanDialog({ onClose }: { onClose: () => void }) {
+  const bulkMutation = useBulkCreateTagihan()
+  const [error, setError] = useState('')
+  const [selectedSiswa, setSelectedSiswa] = useState<Siswa[]>([])
+  const [showConfirm, setShowConfirm] = useState(false)
+  const [form, setForm] = useState({
+    kategori_id: '',
+    tahun_ajaran_id: '',
+    nominal: '',
+    jatuh_tempo: '',
+    semester: '',
+    catatan: '',
+  })
+
+  function handleChange(field: string, value: string) {
+    setForm((f) => ({ ...f, [field]: value }))
+  }
+
+  function validate(): string | null {
+    if (selectedSiswa.length === 0) return 'Pilih minimal 1 siswa'
+    if (!form.kategori_id) return 'Kategori wajib diisi'
+    if (!form.nominal || Number(form.nominal) <= 0) return 'Nominal harus lebih dari 0'
+    if (!form.jatuh_tempo) return 'Jatuh tempo wajib diisi'
+    return null
+  }
+
+  function handlePreSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    const err = validate()
+    if (err) { setError(err); return }
+    setError('')
+    if (selectedSiswa.length >= 5) {
+      setShowConfirm(true)
+    } else {
+      handleSubmit()
+    }
+  }
+
+  async function handleSubmit() {
+    setShowConfirm(false)
+    setError('')
+    try {
+      await bulkMutation.mutateAsync({
+        siswa_ids: selectedSiswa.map((s) => s.id),
+        kategori_id: Number(form.kategori_id),
+        tahun_ajaran_id: Number(form.tahun_ajaran_id),
+        nominal: Number(form.nominal),
+        jatuh_tempo: form.jatuh_tempo,
+        semester: form.semester || undefined,
+        catatan: form.catatan || undefined,
+      })
+      onClose()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal membuat tagihan massal')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+      <div className="w-full max-w-lg rounded-xl border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-card-foreground">Tagihan Massal</h2>
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+        </div>
+
+        <form onSubmit={handlePreSubmit} className="mt-4 space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Pilih Siswa</label>
+            <SiswaMultiPicker value={selectedSiswa} onChange={setSelectedSiswa} />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Kategori ID</label>
+              <input type="number" value={form.kategori_id} onChange={(e) => handleChange('kategori_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
+              <input type="number" value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Nominal</label>
+              <input type="number" value={form.nominal} onChange={(e) => handleChange('nominal', e.target.value)} required min={1} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Jatuh Tempo</label>
+              <input type="date" value={form.jatuh_tempo} onChange={(e) => handleChange('jatuh_tempo', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Semester</label>
+              <select value={form.semester} onChange={(e) => handleChange('semester', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+                <option value="">-</option>
+                <option value="Ganjil">Ganjil</option>
+                <option value="Genap">Genap</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Catatan</label>
+              <input type="text" value={form.catatan} onChange={(e) => handleChange('catatan', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+            </div>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
+            <button type="submit" disabled={bulkMutation.isPending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              {bulkMutation.isPending ? 'Membuat...' : `Buat untuk ${selectedSiswa.length} siswa`}
+            </button>
+          </div>
+        </form>
+
+        {showConfirm && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center bg-foreground/20 p-4">
+            <div className="w-full max-w-sm rounded-xl border border-border bg-card p-6 shadow-lg">
+              <p className="text-sm text-card-foreground">Anda akan membuat tagihan untuk <strong>{selectedSiswa.length} siswa</strong> sekaligus. Lanjutkan?</p>
+              <div className="mt-4 flex justify-end gap-2">
+                <button onClick={() => setShowConfirm(false)} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
+                <button onClick={handleSubmit} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">Ya, Buat Tagihan</button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

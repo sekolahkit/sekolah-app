@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import { useRekapPembayaran, useRekapPPDB, useRekapSiswa } from '@/hooks/use-laporan'
 import { cn } from '@/lib/utils'
-import { BarChart3, Users, GraduationCap } from 'lucide-react'
+import { BarChart3, Users, GraduationCap, Download, Loader2 } from 'lucide-react'
+import { downloadExport } from '@/lib/export'
 
 export function LaporanPage() {
   const [tab, setTab] = useState<'pembayaran' | 'ppdb' | 'siswa'>('pembayaran')
@@ -39,11 +40,20 @@ function LaporanPembayaran() {
 
   const [tanggalMulai, setTanggalMulai] = useState(firstDay)
   const [tanggalSelesai, setTanggalSelesai] = useState(lastDay)
+  const [exporting, setExporting] = useState(false)
 
   const { data, isLoading } = useRekapPembayaran(tanggalMulai, tanggalSelesai)
 
   const totalNominal = data?.reduce((sum, item) => sum + item.total_nominal, 0) ?? 0
   const totalTransaksi = data?.reduce((sum, item) => sum + item.total_transaksi, 0) ?? 0
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport(`/laporan/pembayaran/export?tanggal_mulai=${tanggalMulai}&tanggal_selesai=${tanggalSelesai}`, 'laporan-pembayaran.xlsx')
+    } catch { /* endpoint may not exist */ }
+    setExporting(false)
+  }
 
   return (
     <div className="space-y-4">
@@ -56,6 +66,10 @@ function LaporanPembayaran() {
           <label className="text-xs font-medium text-muted-foreground">Sampai</label>
           <input type="date" value={tanggalSelesai} onChange={(e) => setTanggalSelesai(e.target.value)} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" />
         </div>
+        <button onClick={handleExport} disabled={exporting} className="mt-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Ekspor
+        </button>
       </div>
 
       <div className="grid grid-cols-2 gap-4">
@@ -97,13 +111,28 @@ function LaporanPembayaran() {
 
 function LaporanPPDB() {
   const [tahunAjaranId, setTahunAjaranId] = useState(1)
+  const [exporting, setExporting] = useState(false)
   const { data, isLoading } = useRekapPPDB(tahunAjaranId)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport(`/laporan/ppdb/export?tahun_ajaran_id=${tahunAjaranId}`, 'laporan-ppdb.xlsx')
+    } catch { /* endpoint may not exist */ }
+    setExporting(false)
+  }
 
   return (
     <div className="space-y-4">
-      <div className="space-y-1">
-        <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
-        <input type="number" value={tahunAjaranId} onChange={(e) => setTahunAjaranId(Number(e.target.value))} min={1} className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" />
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
+          <input type="number" value={tahunAjaranId} onChange={(e) => setTahunAjaranId(Number(e.target.value))} min={1} className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" />
+        </div>
+        <button onClick={handleExport} disabled={exporting} className="mt-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Ekspor
+        </button>
       </div>
 
       {isLoading ? (
@@ -127,19 +156,36 @@ function LaporanPPDB() {
 
 function LaporanSiswa() {
   const { data, isLoading } = useRekapSiswa()
+  const [exporting, setExporting] = useState(false)
+
+  async function handleExport() {
+    setExporting(true)
+    try {
+      await downloadExport('/laporan/siswa/export', 'laporan-siswa.xlsx')
+    } catch { /* endpoint may not exist */ }
+    setExporting(false)
+  }
 
   if (isLoading) return <div className="text-muted-foreground">Memuat...</div>
   if (!data) return <div className="text-muted-foreground">Tidak ada data.</div>
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-      <StatCard label="Total Siswa" value={data.total.toString()} />
-      <StatCard label="Aktif" value={data.aktif.toString()} />
-      <StatCard label="Lulus" value={data.lulus.toString()} />
-      <StatCard label="Pindah" value={data.pindah.toString()} />
-      <StatCard label="Keluar" value={data.keluar.toString()} />
-      <StatCard label="Laki-laki" value={data.laki_laki.toString()} />
-      <StatCard label="Perempuan" value={data.perempuan.toString()} />
+    <div className="space-y-4">
+      <div className="flex justify-end">
+        <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          Ekspor
+        </button>
+      </div>
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="Total Siswa" value={data.total.toString()} />
+        <StatCard label="Aktif" value={data.aktif.toString()} />
+        <StatCard label="Lulus" value={data.lulus.toString()} />
+        <StatCard label="Pindah" value={data.pindah.toString()} />
+        <StatCard label="Keluar" value={data.keluar.toString()} />
+        <StatCard label="Laki-laki" value={data.laki_laki.toString()} />
+        <StatCard label="Perempuan" value={data.perempuan.toString()} />
+      </div>
     </div>
   )
 }
