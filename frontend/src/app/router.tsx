@@ -7,6 +7,10 @@ import { DashboardPage } from '@/features/dashboard/dashboard-page'
 import { SiswaPage } from '@/features/siswa/siswa-page'
 import { PembayaranPage } from '@/features/pembayaran/pembayaran-page'
 import { PengaturanPage } from '@/features/pengaturan/pengaturan-page'
+import { PpdbDaftarPage } from '@/features/ppdb/ppdb-daftar-page'
+import { PpdbPengumumanPage } from '@/features/ppdb/ppdb-pengumuman-page'
+import { PpdbAdminPage } from '@/features/ppdb/ppdb-admin-page'
+import { LaporanPage } from '@/features/laporan/laporan-page'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -29,6 +33,8 @@ export function AppRouter() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/setup" element={<SetupPage />} />
+        <Route path="/ppdb/daftar" element={<PpdbDaftarPage />} />
+        <Route path="/ppdb/pengumuman" element={<PpdbPengumumanPage />} />
         <Route
           path="/"
           element={
@@ -40,6 +46,8 @@ export function AppRouter() {
           <Route index element={<DashboardPage />} />
           <Route path="siswa" element={<SiswaPage />} />
           <Route path="pembayaran" element={<PembayaranPage />} />
+          <Route path="ppdb" element={<PpdbAdminPage />} />
+          <Route path="laporan" element={<LaporanPage />} />
           <Route path="pengaturan" element={<PengaturanPage />} />
         </Route>
       </Routes>
