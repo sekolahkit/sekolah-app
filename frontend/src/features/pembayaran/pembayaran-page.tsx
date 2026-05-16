@@ -226,12 +226,22 @@ function BayarDialog({ tagihan, rekening, onClose }: { tagihan: Tagihan; rekenin
   const [metode, setMetode] = useState('transfer')
   const [rekeningId, setRekeningId] = useState(rekening[0]?.id || 0)
   const [jumlah, setJumlah] = useState(tagihan.nominal.toString())
+  const [file, setFile] = useState<File | null>(null)
+  const [uploading, setUploading] = useState(false)
   const [error, setError] = useState('')
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setUploading(true)
+
     try {
+      let buktiBayarPath: string | undefined
+      if (file && metode === 'transfer') {
+        const { uploadFile } = await import('@/lib/upload')
+        buktiBayarPath = await uploadFile(file, 'bukti_bayar')
+      }
+
       await createPembayaran.mutateAsync({
         tagihan_id: tagihan.id,
         siswa_id: tagihan.siswa_id,
@@ -239,11 +249,14 @@ function BayarDialog({ tagihan, rekening, onClose }: { tagihan: Tagihan; rekenin
         tanggal: new Date().toISOString().split('T')[0],
         metode,
         rekening_sekolah_id: metode === 'transfer' ? rekeningId : undefined,
+        bukti_bayar: buktiBayarPath,
       })
       onClose()
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
       setError(msg || 'Gagal mengirim pembayaran')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -281,12 +294,25 @@ function BayarDialog({ tagihan, rekening, onClose }: { tagihan: Tagihan; rekenin
             </div>
           )}
 
+          {metode === 'transfer' && (
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-muted-foreground">Bukti Transfer</label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,application/pdf"
+                onChange={(e) => setFile(e.target.files?.[0] || null)}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:text-muted-foreground"
+              />
+              {file && <p className="text-xs text-muted-foreground">{file.name} ({(file.size / 1024).toFixed(0)} KB)</p>}
+            </div>
+          )}
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
           <div className="flex justify-end gap-2 pt-2">
             <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
-            <button type="submit" disabled={createPembayaran.isPending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
-              {createPembayaran.isPending ? 'Mengirim...' : 'Kirim Pembayaran'}
+            <button type="submit" disabled={createPembayaran.isPending || uploading} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              {uploading ? 'Mengupload...' : createPembayaran.isPending ? 'Mengirim...' : 'Kirim Pembayaran'}
             </button>
           </div>
         </form>

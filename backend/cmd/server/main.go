@@ -17,6 +17,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
+	"github.com/Sekolahkit/sekolah-app/internal/upload"
 	"github.com/Sekolahkit/sekolah-app/pkg/config"
 	"github.com/Sekolahkit/sekolah-app/pkg/database"
 	mw "github.com/Sekolahkit/sekolah-app/pkg/middleware"
@@ -259,6 +260,15 @@ func main() {
 			r.Get("/laporan/pembayaran", laporanHandler.RekapPembayaran)
 			r.Get("/laporan/ppdb", laporanHandler.RekapPPDB)
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
+		})
+
+		uploadService := upload.NewService("./uploads", cfg.Upload.MaxSize, cfg.Upload.AllowedTypes)
+		uploadHandler := upload.NewHandler(uploadService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Post("/upload", uploadHandler.Upload)
+			r.Get("/upload/*", uploadHandler.Download)
 		})
 	})
 

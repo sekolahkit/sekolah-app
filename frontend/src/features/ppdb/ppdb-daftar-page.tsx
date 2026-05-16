@@ -1,11 +1,14 @@
 import { useState } from 'react'
 import { useDaftar } from '@/hooks/use-ppdb'
-import { CheckCircle } from 'lucide-react'
+import { CheckCircle, Upload } from 'lucide-react'
 
 export function PpdbDaftarPage() {
   const daftarMutation = useDaftar()
   const [success, setSuccess] = useState<{ id: number } | null>(null)
   const [error, setError] = useState('')
+  const [foto, setFoto] = useState<File | null>(null)
+  const [berkas, setBerkas] = useState<File[]>([])
+  const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
     tahun_ajaran_id: '1',
     nama_lengkap: '',
@@ -30,15 +33,33 @@ export function PpdbDaftarPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     setError('')
+    setUploading(true)
     try {
+      let fotoPath: string | undefined
+      if (foto) {
+        const { uploadFile } = await import('@/lib/upload')
+        fotoPath = await uploadFile(foto, 'foto_ppdb')
+      }
+
       const result = await daftarMutation.mutateAsync({
         ...form,
         tahun_ajaran_id: Number(form.tahun_ajaran_id),
+        foto: fotoPath,
       })
+
+      if (berkas.length > 0) {
+        const { uploadFile } = await import('@/lib/upload')
+        for (const file of berkas) {
+          await uploadFile(file, 'berkas_ppdb')
+        }
+      }
+
       setSuccess({ id: result.id })
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
       setError(msg || 'Pendaftaran gagal')
+    } finally {
+      setUploading(false)
     }
   }
 
@@ -95,10 +116,39 @@ export function PpdbDaftarPage() {
             <FormField label="Pekerjaan Orangtua" value={form.pekerjaan_ortu} onChange={(v) => handleChange('pekerjaan_ortu', v)} />
           </div>
 
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Foto (JPG/PNG)</label>
+            <input
+              type="file"
+              accept="image/jpeg,image/png"
+              onChange={(e) => setFoto(e.target.files?.[0] || null)}
+              className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground file:mr-3 file:rounded file:border-0 file:bg-muted file:px-2 file:py-1 file:text-xs file:text-muted-foreground"
+            />
+            {foto && <p className="text-xs text-muted-foreground">{foto.name}</p>}
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Berkas (Ijazah, Akta, KK, dll)</label>
+            <div className="flex items-center gap-2">
+              <label className="flex cursor-pointer items-center gap-2 rounded-md border border-input bg-background px-3 py-2 text-sm text-muted-foreground hover:bg-muted">
+                <Upload className="h-4 w-4" />
+                Pilih File
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,application/pdf"
+                  multiple
+                  onChange={(e) => setBerkas(Array.from(e.target.files || []))}
+                  className="hidden"
+                />
+              </label>
+              {berkas.length > 0 && <span className="text-xs text-muted-foreground">{berkas.length} file dipilih</span>}
+            </div>
+          </div>
+
           {error && <p className="text-sm text-destructive">{error}</p>}
 
-          <button type="submit" disabled={daftarMutation.isPending} className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
-            {daftarMutation.isPending ? 'Mengirim...' : 'Daftar'}
+          <button type="submit" disabled={daftarMutation.isPending || uploading} className="w-full rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            {uploading ? 'Mengupload berkas...' : daftarMutation.isPending ? 'Mengirim...' : 'Daftar'}
           </button>
         </form>
       </div>

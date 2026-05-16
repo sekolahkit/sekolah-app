@@ -72,7 +72,7 @@ export function usePembayaranList(params: PembayaranListParams = {}) {
 export function useCreatePembayaran() {
   const qc = useQueryClient()
   return useMutation({
-    mutationFn: async (data: { tagihan_id: number; siswa_id: number; jumlah: number; tanggal: string; metode: string; rekening_sekolah_id?: number; catatan?: string }) => {
+    mutationFn: async (data: { tagihan_id: number; siswa_id: number; jumlah: number; tanggal: string; metode: string; rekening_sekolah_id?: number; catatan?: string; bukti_bayar?: string }) => {
       const res = await api.post<ApiResponse<Pembayaran>>('/pembayaran', data)
       return res.data.data
     },
