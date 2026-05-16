@@ -1,4 +1,4 @@
-import { useTheme } from '@/hooks/use-theme'
+import { useTheme } from '@/hooks/use-theme-hook'
 import { cn } from '@/lib/utils'
 import type { ThemeMode } from '@/lib/theme'
 import { Sun, Moon, Monitor } from 'lucide-react'

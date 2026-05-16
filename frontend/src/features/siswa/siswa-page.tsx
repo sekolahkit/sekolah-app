@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useSiswaList, useCreateSiswa, useUpdateSiswa, useDeleteSiswa } from '@/hooks/use-siswa'
-import { useAuth } from '@/hooks/use-auth'
+import { useAuth } from '@/hooks/use-auth-hook'
 import { cn } from '@/lib/utils'
 import { Plus, Search, Edit2, Trash2, X } from 'lucide-react'
 import type { Siswa } from '@/types'

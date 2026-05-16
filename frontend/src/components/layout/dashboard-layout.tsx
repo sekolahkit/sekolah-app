@@ -1,6 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { useAuth } from '@/hooks/use-auth'
-import { useTheme } from '@/hooks/use-theme'
+import { useAuth } from '@/hooks/use-auth-hook'
+import { useTheme } from '@/hooks/use-theme-hook'
 import { cn } from '@/lib/utils'
 import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Moon, Sun, Monitor } from 'lucide-react'
 

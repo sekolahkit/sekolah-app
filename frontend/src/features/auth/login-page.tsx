@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react'
-import { useAuth } from '@/hooks/use-auth'
+import { useAuth } from '@/hooks/use-auth-hook'
 import { useNavigate } from 'react-router-dom'
 
 export function LoginPage() {

@@ -1,13 +1,12 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { type ThemeConfig, type ThemeMode, getStoredTheme, setStoredTheme, applyThemeConfig } from '@/lib/theme'
+import { ThemeContext } from '@/hooks/theme-context'
 
-interface ThemeContextValue {
+export interface ThemeContextValue {
   theme: ThemeConfig
   setTheme: (config: Partial<ThemeConfig>) => void
   setMode: (mode: ThemeMode) => void
 }
-
-const ThemeContext = createContext<ThemeContextValue | undefined>(undefined)
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setThemeState] = useState<ThemeConfig>(getStoredTheme)
@@ -40,10 +39,4 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       {children}
     </ThemeContext.Provider>
   )
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext)
-  if (!ctx) throw new Error('useTheme must be used within ThemeProvider')
-  return ctx
 }
