@@ -96,6 +96,14 @@ Lihat [docs/configuration.md](docs/configuration.md) untuk referensi lengkap `co
 - [Keamanan](docs/security.md)
 - [Kontribusi](docs/contributing.md)
 
+## Dukung Pengembangan
+
+SekolahApp dikembangkan sebagai proyek open-source untuk membantu sekolah mengelola pembayaran, PPDB, notifikasi, dan laporan.
+
+Jika proyek ini bermanfaat, Anda bisa mendukung pengembangan melalui [Saweria](https://saweria.co/erwisnu).
+
+Daftar pendukung bisa dilihat di [docs/supporters.md](docs/supporters.md).
+
 ## Lisensi
 
 [MIT](LICENSE)
