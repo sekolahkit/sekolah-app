@@ -1,0 +1,136 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to build and upload assets for'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            goos: linux
+            goarch: amd64
+            ext: ''
+            archive: tar.gz
+          - os: windows-latest
+            goos: windows
+            goarch: amd64
+            ext: '.exe'
+            archive: zip
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref_name }}
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Embed frontend dist
+        shell: bash
+        run: |
+          rm -rf backend/pkg/frontend/dist
+          cp -r frontend/dist backend/pkg/frontend/dist
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+
+      - name: Install GCC (Windows)
+        if: matrix.goos == 'windows'
+        uses: msys2/setup-msys2@v2
+        with:
+          update: false
+          install: mingw-w64-x86_64-gcc
+
+      - name: Build binary
+        working-directory: backend
+        shell: bash
+        env:
+          CGO_ENABLED: '1'
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          if [ "${{ matrix.goos }}" = "windows" ]; then
+            export PATH="/d/a/_temp/msys64/mingw64/bin:$PATH"
+            export CC=x86_64-w64-mingw32-gcc
+          fi
+          go build -o sekolah-app${{ matrix.ext }} cmd/server/main.go
+
+      - name: Determine tag
+        id: tag
+        shell: bash
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Package (Linux)
+        if: matrix.archive == 'tar.gz'
+        shell: bash
+        run: |
+          tar -czf sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.tar.gz -C backend sekolah-app
+
+      - name: Package (Windows)
+        if: matrix.archive == 'zip'
+        shell: bash
+        run: |
+          cd backend && zip ../sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.zip sekolah-app${{ matrix.ext }}
+
+      - name: Generate checksum
+        shell: bash
+        run: |
+          sha256sum sekolah-app-${{ steps.tag.outputs.name }}-${{ matrix.goos }}-${{ matrix.goarch }}.* > checksums-${{ matrix.goos }}.txt
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.goos }}
+          path: |
+            sekolah-app-${{ steps.tag.outputs.name }}-*
+            checksums-${{ matrix.goos }}.txt
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Determine tag
+        id: tag
+        run: echo "name=${{ github.event.inputs.tag || github.ref_name }}" >> "$GITHUB_OUTPUT"
+
+      - name: Merge checksums
+        run: |
+          cat artifacts/release-linux/checksums-linux.txt artifacts/release-windows/checksums-windows.txt > checksums.txt
+
+      - name: Upload to release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.name }}
+          files: |
+            artifacts/release-linux/sekolah-app-*
+            artifacts/release-windows/sekolah-app-*
+            checksums.txt
