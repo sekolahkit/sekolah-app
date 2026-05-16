@@ -197,3 +197,32 @@ func (r *Repository) GetPending(sekolahID int64, limit int) ([]Notifikasi, error
 	}
 	return list, nil
 }
+
+func (r *Repository) GetAllPending(limit int) ([]Notifikasi, error) {
+	rows, err := sq.Select("id", "sekolah_id", "tipe", "penerima", "pesan", "status",
+		"retry_count", "max_retries", "COALESCE(last_error,'')",
+		"COALESCE(scheduled_at,'')", "COALESCE(sent_at,'')", "created_at").
+		From("notifikasi_antrian").
+		Where(sq.Eq{"status": "pending"}).
+		Where("retry_count < max_retries").
+		Where("scheduled_at IS NULL OR scheduled_at <= datetime('now')").
+		OrderBy("created_at ASC").
+		Limit(uint64(limit)).
+		RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Notifikasi
+	for rows.Next() {
+		var n Notifikasi
+		err := rows.Scan(&n.ID, &n.SekolahID, &n.Tipe, &n.Penerima, &n.Pesan, &n.Status,
+			&n.RetryCount, &n.MaxRetries, &n.LastError, &n.ScheduledAt, &n.SentAt, &n.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, n)
+	}
+	return list, nil
+}
