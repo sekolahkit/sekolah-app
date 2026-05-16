@@ -242,6 +242,7 @@ func main() {
 			r.Get("/notifikasi", notifHandler.ListNotifikasi)
 			r.Post("/notifikasi/test", notifHandler.TestSend)
 			r.Get("/notifikasi/queue", notifHandler.QueueStatus)
+			r.Post("/notifikasi/{id}/retry", notifHandler.Retry)
 		})
 
 		laporanRepo := laporan.NewRepository(db)

@@ -63,3 +63,16 @@ export function useTestSend() {
     },
   })
 }
+
+export function useRetryNotifikasi() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.post(`/notifikasi/${id}/retry`)
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['notifikasi'] })
+      qc.invalidateQueries({ queryKey: ['notifikasi-queue'] })
+    },
+  })
+}

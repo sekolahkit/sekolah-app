@@ -114,6 +114,32 @@ func (r *Repository) UpdateStatus(id int64, status, lastError string, retryCount
 	return err
 }
 
+func (r *Repository) GetByID(sekolahID, id int64) (*Notifikasi, error) {
+	var n Notifikasi
+	err := sq.Select("id", "sekolah_id", "tipe", "penerima", "pesan", "status",
+		"retry_count", "max_retries", "COALESCE(last_error,'')",
+		"COALESCE(scheduled_at,'')", "COALESCE(sent_at,'')", "created_at").
+		From("notifikasi_antrian").
+		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
+		RunWith(r.db).QueryRow().
+		Scan(&n.ID, &n.SekolahID, &n.Tipe, &n.Penerima, &n.Pesan, &n.Status,
+			&n.RetryCount, &n.MaxRetries, &n.LastError,
+			&n.ScheduledAt, &n.SentAt, &n.CreatedAt)
+	if err != nil {
+		return nil, err
+	}
+	return &n, nil
+}
+
+func (r *Repository) ResetForRetry(id int64) error {
+	_, err := sq.Update("notifikasi_antrian").
+		Set("status", "pending").
+		Set("last_error", "").
+		Where(sq.Eq{"id": id}).
+		RunWith(r.db).Exec()
+	return err
+}
+
 func (r *Repository) GetQueueStats(sekolahID int64) (*QueueStats, error) {
 	rows, err := sq.Select("status", "COUNT(*)").
 		From("notifikasi_antrian").

@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { useNotifikasiList, useQueueStats, useTestSend } from '@/hooks/use-notifikasi'
+import { useNotifikasiList, useQueueStats, useTestSend, useRetryNotifikasi } from '@/hooks/use-notifikasi'
 import { cn } from '@/lib/utils'
-import { Send, AlertCircle, CheckCircle, Clock, X } from 'lucide-react'
+import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw } from 'lucide-react'
 import type { Notifikasi } from '@/hooks/use-notifikasi'
 
 export function NotifikasiPage() {
@@ -66,27 +66,12 @@ export function NotifikasiPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Retry</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Waktu</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Aksi</th>
                 </tr>
               </thead>
               <tbody>
                 {data.data.map((n: Notifikasi) => (
-                  <tr key={n.id} className="border-b border-border last:border-0 hover:bg-muted/30">
-                    <td className="px-4 py-3"><TipeBadge tipe={n.tipe} /></td>
-                    <td className="px-4 py-3 text-foreground font-mono text-xs">{n.penerima}</td>
-                    <td className="px-4 py-3 text-foreground max-w-[200px] truncate">{n.pesan}</td>
-                    <td className="px-4 py-3"><StatusBadge status={n.status} /></td>
-                    <td className="px-4 py-3 text-foreground">
-                      {n.retry_count > 0 && (
-                        <span className="text-xs text-muted-foreground">{n.retry_count}/{n.max_retries}</span>
-                      )}
-                      {n.last_error && (
-                        <p className="text-xs text-destructive truncate max-w-[150px]" title={n.last_error}>{n.last_error}</p>
-                      )}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-muted-foreground">
-                      {n.sent_at ? n.sent_at.split('T')[0] : n.created_at?.split('T')[0] || '-'}
-                    </td>
-                  </tr>
+                  <NotifikasiRow key={n.id} notifikasi={n} />
                 ))}
               </tbody>
             </table>
@@ -179,6 +164,41 @@ function StatCard({ icon: Icon, label, value, className }: { icon: typeof Clock;
       </div>
       <p className="mt-1 text-2xl font-semibold text-card-foreground">{value}</p>
     </div>
+  )
+}
+
+function NotifikasiRow({ notifikasi: n }: { notifikasi: Notifikasi }) {
+  const retryMutation = useRetryNotifikasi()
+
+  return (
+    <tr className="border-b border-border last:border-0 hover:bg-muted/30">
+      <td className="px-4 py-3"><TipeBadge tipe={n.tipe} /></td>
+      <td className="px-4 py-3 text-foreground font-mono text-xs">{n.penerima}</td>
+      <td className="px-4 py-3 text-foreground max-w-[200px] truncate">{n.pesan}</td>
+      <td className="px-4 py-3"><StatusBadge status={n.status} /></td>
+      <td className="px-4 py-3 text-foreground">
+        {n.retry_count > 0 && (
+          <span className="text-xs text-muted-foreground">{n.retry_count}/{n.max_retries}</span>
+        )}
+        {n.last_error && (
+          <p className="text-xs text-destructive truncate max-w-[150px]" title={n.last_error}>{n.last_error}</p>
+        )}
+      </td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">
+        {n.sent_at ? n.sent_at.split('T')[0] : n.created_at?.split('T')[0] || '-'}
+      </td>
+      <td className="px-4 py-3 text-right">
+        {n.status === 'failed' && (
+          <button
+            onClick={() => retryMutation.mutate(n.id)}
+            disabled={retryMutation.isPending}
+            className="rounded bg-muted p-1.5 hover:bg-accent" title="Retry"
+          >
+            <RotateCcw className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        )}
+      </td>
+    </tr>
   )
 }
 

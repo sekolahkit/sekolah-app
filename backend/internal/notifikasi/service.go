@@ -1,5 +1,7 @@
 package notifikasi
 
+import "fmt"
+
 type Service struct {
 	repo *Repository
 }
@@ -48,4 +50,15 @@ func (s *Service) Enqueue(sekolahID int64, tipe, penerima, pesan string) (int64,
 		MaxRetries: 3,
 	}
 	return s.repo.Create(n)
+}
+
+func (s *Service) Retry(sekolahID, id int64) error {
+	n, err := s.repo.GetByID(sekolahID, id)
+	if err != nil {
+		return fmt.Errorf("notifikasi tidak ditemukan")
+	}
+	if n.Status != "failed" {
+		return fmt.Errorf("hanya notifikasi gagal yang bisa di-retry")
+	}
+	return s.repo.ResetForRetry(id)
 }

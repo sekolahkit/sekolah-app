@@ -7,6 +7,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/Sekolahkit/sekolah-app/pkg/response"
 	"github.com/Sekolahkit/sekolah-app/pkg/validator"
+	"github.com/go-chi/chi/v5"
 )
 
 type Handler struct {
@@ -87,4 +88,20 @@ func parseListParams(r *http.Request) ListParams {
 		Status: r.URL.Query().Get("status"),
 		Tipe:   r.URL.Query().Get("tipe"),
 	}
+}
+
+func (h *Handler) Retry(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, 400, "INVALID_ID", "ID tidak valid")
+		return
+	}
+
+	if err := h.service.Retry(user.SekolahID, id); err != nil {
+		response.Error(w, 422, "RETRY_FAILED", err.Error())
+		return
+	}
+
+	response.JSON(w, 200, map[string]string{"message": "Notifikasi berhasil di-retry"})
 }
