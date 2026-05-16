@@ -59,6 +59,7 @@ Tabel utama untuk data sekolah.
 CREATE TABLE sekolah (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     nama TEXT NOT NULL,
+    kode TEXT NOT NULL UNIQUE,    -- kode unik untuk login (misal: "sdn1bdg", "smkn2jkt")
     alamat TEXT,
     telepon TEXT,
     email TEXT,
@@ -115,10 +116,12 @@ Tabel tracking percobaan login untuk account lockout.
 ```sql
 CREATE TABLE login_attempt (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER,           -- nullable: NULL jika kode sekolah invalid/tidak dikirim
     email TEXT NOT NULL,
     ip_address TEXT,
     success BOOLEAN NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
 );
 ```
 
@@ -210,14 +213,16 @@ Tabel relasi pengguna ke siswa untuk authorization. Menentukan siapa boleh akses
 ```sql
 CREATE TABLE pengguna_siswa (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
     pengguna_id INTEGER NOT NULL,
     siswa_id INTEGER NOT NULL,
     hubungan TEXT NOT NULL,        -- diri_sendiri, ayah, ibu, wali, lainnya
     aktif BOOLEAN DEFAULT TRUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
     FOREIGN KEY (pengguna_id) REFERENCES pengguna(id),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id),
-    UNIQUE(pengguna_id, siswa_id)
+    UNIQUE(sekolah_id, pengguna_id, siswa_id)
 );
 ```
 
@@ -293,8 +298,7 @@ CREATE TABLE pembayaran (
     metode TEXT NOT NULL,          -- transfer, cash, midtrans, xendit
     provider TEXT,                  -- midtrans, xendit (NULL jika manual)
     bukti_bayar TEXT,              -- path file
-    payment_gateway_id TEXT,       -- ID dari payment gateway
-    idempotency_key TEXT,          -- unique key untuk mencegah double processing
+    payment_gateway_id TEXT,       -- ID dari payment gateway (NULL jika manual)
     status TEXT DEFAULT 'pending', -- pending, verified, rejected
     catatan TEXT,
     verified_by INTEGER,           -- pengguna ID yang verifikasi
@@ -308,6 +312,8 @@ CREATE TABLE pembayaran (
 ```
 
 > **Invariant:** `SUM(pembayaran.jumlah WHERE status='verified' AND tagihan_id=X) <= tagihan.nominal`. Pembayaran yang menyebabkan overpay harus ditolak di level service dalam DB transaction.
+
+> **Catatan SQLite:** `UNIQUE(provider, payment_gateway_id)` dengan NULL memungkinkan banyak pembayaran manual (provider=NULL, payment_gateway_id=NULL) karena SQLite menganggap NULL != NULL di unique constraint. Ini sesuai kebutuhan — hanya pembayaran via gateway yang perlu idempotency.
 
 ### ppdb_pendaftaran
 Tabel pendaftar PPDB.
@@ -538,8 +544,9 @@ CREATE INDEX idx_refresh_token_pengguna_id ON refresh_token(pengguna_id);
 CREATE INDEX idx_refresh_token_expires_at ON refresh_token(expires_at);
 
 -- login_attempt
-CREATE INDEX idx_login_attempt_email ON login_attempt(email);
+CREATE INDEX idx_login_attempt_sekolah_email ON login_attempt(sekolah_id, email);
 CREATE INDEX idx_login_attempt_created_at ON login_attempt(created_at);
+CREATE INDEX idx_login_attempt_ip ON login_attempt(ip_address);
 
 -- ppdb_pendaftaran
 CREATE INDEX idx_ppdb_pendaftaran_sekolah_id ON ppdb_pendaftaran(sekolah_id);
@@ -557,6 +564,7 @@ CREATE INDEX idx_notifikasi_antrian_scheduled_at ON notifikasi_antrian(scheduled
 CREATE INDEX idx_kelas_siswa_sekolah_id ON kelas_siswa(sekolah_id);
 
 -- pengguna_siswa
+CREATE INDEX idx_pengguna_siswa_sekolah_id ON pengguna_siswa(sekolah_id);
 CREATE INDEX idx_pengguna_siswa_pengguna_id ON pengguna_siswa(pengguna_id);
 CREATE INDEX idx_pengguna_siswa_siswa_id ON pengguna_siswa(siswa_id);
 

@@ -315,6 +315,7 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 **Request:**
 ```json
 {
+    "kode_sekolah": "sdn1bdg",
     "email": "admin@sekolah.id",
     "password": "password123"
 }

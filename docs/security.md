@@ -25,15 +25,22 @@ Kedua cookie di-set dengan flag:
 ### Login Flow
 
 ```
-1. User kirim email + password
-2. Backend cek account lockout
-3. Backend hash password dengan bcrypt, bandingkan dengan DB
-4. Jika gagal → catat di login_attempt, cek threshold lockout
-5. Jika cocok → generate access token (JWT, 15m) + refresh token (random, 7d)
-6. Simpan hash refresh token di tabel refresh_token
-7. Set dua httpOnly cookie (access_token + refresh_token)
-8. Return user data
+1. User kirim kode_sekolah + email + password
+2. Resolve kode_sekolah → sekolah_id
+   - Jika kode invalid → catat login_attempt(sekolah_id=NULL), return 401
+3. Cek account lockout per (sekolah_id, email)
+   - Jika locked → return 429 dengan info waktu unlock
+4. Backend hash password dengan bcrypt, bandingkan dengan DB (scope: sekolah_id + email)
+5. Jika gagal → catat di login_attempt(sekolah_id, email), cek threshold lockout
+6. Jika cocok → generate access token (JWT, 15m) + refresh token (random, 7d)
+7. Simpan hash refresh token di tabel refresh_token
+8. Set dua httpOnly cookie (access_token + refresh_token)
+9. Return user data
 ```
+
+Lockout key:
+- Sekolah valid: `(sekolah_id, email)` — isolasi per tenant
+- Sekolah invalid: `(NULL, email)` + rate limit by IP — mencegah brute force kode sekolah
 
 ### Refresh Flow
 
