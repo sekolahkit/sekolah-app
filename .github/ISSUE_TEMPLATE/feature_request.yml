@@ -1,0 +1,53 @@
+name: Feature Request
+description: Usulkan fitur baru
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih atas usulan fitur. Jelaskan kebutuhan Anda selengkap mungkin.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Masalah yang Ingin Diselesaikan
+      description: Masalah apa yang akan diselesaikan oleh fitur ini?
+      placeholder: Saya sering kesulitan ketika...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Solusi yang Diusulkan
+      description: Bagaimana fitur ini seharusnya bekerja?
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatif yang Dipertimbangkan
+      description: Apakah ada solusi alternatif yang sudah Anda pertimbangkan?
+  - type: dropdown
+    id: module
+    attributes:
+      label: Modul Terkait
+      options:
+        - Pembayaran
+        - PPDB
+        - Siswa
+        - Notifikasi
+        - Laporan
+        - Auth
+        - Dashboard
+        - Infrastruktur
+        - Lainnya
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Prioritas (menurut Anda)
+      options:
+        - Tinggi - blocking workflow
+        - Sedang - nice to have
+        - Rendah - minor improvement

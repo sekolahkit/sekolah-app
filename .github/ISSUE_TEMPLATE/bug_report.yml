@@ -1,0 +1,66 @@
+name: Bug Report
+description: Laporkan bug atau masalah
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Terima kasih telah melaporkan bug. Mohon isi form berikut selengkap mungkin.
+  - type: textarea
+    id: description
+    attributes:
+      label: Deskripsi Bug
+      description: Jelaskan bug yang Anda temukan
+      placeholder: Apa yang terjadi?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Langkah Reproduksi
+      description: Langkah-langkah untuk mereproduksi bug
+      placeholder: |
+        1. Buka halaman '...'
+        2. Klik tombol '...'
+        3. Lihat error
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Perilaku yang Diharapkan
+      description: Apa yang seharusnya terjadi?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Perilaku Aktual
+      description: Apa yang sebenarnya terjadi?
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Modul
+      options:
+        - Pembayaran
+        - PPDB
+        - Siswa
+        - Notifikasi
+        - Laporan
+        - Auth
+        - Dashboard
+        - Lainnya
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Informasi environment (OS, browser, versi app)
+      placeholder: |
+        - OS: Ubuntu 24.04
+        - Browser: Chrome 130
+        - Versi: v1.0.0

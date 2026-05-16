@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Pertanyaan & Diskusi
+    url: https://github.com/sekolahkit/sekolah-app/discussions
+    about: Gunakan Discussions untuk pertanyaan umum
+  - name: Keamanan
+    url: https://github.com/sekolahkit/sekolah-app/security/advisories/new
+    about: Laporkan kerentanan keamanan secara privat
