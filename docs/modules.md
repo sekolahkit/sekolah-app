@@ -155,16 +155,47 @@ Format kolom Excel untuk import:
 3. Redirect ke halaman payment gateway
 4. Siswa/Orangtua selesaikan pembayaran
 5. Gateway kirim callback ke backend
-6. Backend update status pembayaran
-7. Status tagihan otomatis update
+6. Backend validasi signature callback
+7. Backend cek idempotency (payment_gateway_id sudah ada? → skip, return 200)
+8. Backend cek overpay invariant dalam DB transaction
+9. Simpan pembayaran + update status tagihan (atomic)
+```
+
+### Payment Invariants
+
+| Invariant | Keterangan |
+|-----------|------------|
+| No overpay | `SUM(pembayaran.jumlah WHERE status='verified' AND tagihan_id=X) <= tagihan.nominal` |
+| Idempotency | Callback dengan `(provider, payment_gateway_id)` yang sudah ada → skip, return 200 OK |
+| Atomic update | Insert pembayaran + update status tagihan dalam satu DB transaction |
+| Signature validation | Setiap callback harus divalidasi signature sebelum diproses |
+
+### Signature Validation per Gateway
+
+| Gateway | Metode |
+|---------|--------|
+| Midtrans | SHA-512: `SHA512(order_id + status_code + gross_amount + server_key)` |
+| Xendit | Header `x-callback-token` dibandingkan dengan token di konfigurasi |
+
+### Idempotency Flow
+
+```
+1. Callback masuk dengan payment_gateway_id = "trx-001", provider = "midtrans"
+2. Cek DB: SELECT * FROM pembayaran WHERE provider='midtrans' AND payment_gateway_id='trx-001'
+3. Jika sudah ada → return 200 (tidak proses ulang)
+4. Jika belum ada → lanjut proses dalam transaction:
+   a. Hitung total verified: SELECT SUM(jumlah) FROM pembayaran WHERE tagihan_id=X AND status='verified'
+   b. Jika total + jumlah_baru > nominal → tolak, log anomaly
+   c. Jika OK → INSERT pembayaran, UPDATE tagihan.status
+   d. COMMIT
 ```
 
 ### Adapter Payment Gateway
 ```go
-// interface
 type PaymentGateway interface {
     CreateTransaction(ctx context.Context, req TransactionRequest) (TransactionResponse, error)
     HandleCallback(ctx context.Context, payload []byte) (CallbackResult, error)
+    ValidateSignature(ctx context.Context, payload []byte, headers http.Header) error
     GetStatus(ctx context.Context, transactionID string) (StatusResult, error)
 }
 

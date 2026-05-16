@@ -78,7 +78,7 @@ Tabel pengguna sistem dengan role-based access.
 CREATE TABLE pengguna (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
-    email TEXT NOT NULL UNIQUE,
+    email TEXT NOT NULL,
     password TEXT NOT NULL,        -- bcrypt hash
     nama TEXT NOT NULL,
     role TEXT NOT NULL,            -- admin, operator, guru, siswa, orangtua
@@ -88,7 +88,37 @@ CREATE TABLE pengguna (
     aktif BOOLEAN DEFAULT TRUE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    UNIQUE(sekolah_id, email)
+);
+```
+
+### refresh_token
+Tabel refresh token untuk session management. Token di-hash sebelum disimpan.
+
+```sql
+CREATE TABLE refresh_token (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    pengguna_id INTEGER NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,  -- SHA-256 hash
+    device_info TEXT,                  -- user agent / device identifier
+    expires_at DATETIME NOT NULL,
+    revoked_at DATETIME,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (pengguna_id) REFERENCES pengguna(id)
+);
+```
+
+### login_attempt
+Tabel tracking percobaan login untuk account lockout.
+
+```sql
+CREATE TABLE login_attempt (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    email TEXT NOT NULL,
+    ip_address TEXT,
+    success BOOLEAN NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
@@ -152,7 +182,7 @@ Tabel data siswa. Tidak punya kelas_id langsung (gunakan tabel penghubung).
 CREATE TABLE siswa (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     sekolah_id INTEGER NOT NULL,
-    nis TEXT NOT NULL UNIQUE,
+    nis TEXT NOT NULL,
     nama TEXT NOT NULL,
     jenis_kelamin TEXT NOT NULL,   -- "L" / "P"
     tanggal_lahir DATE,
@@ -169,7 +199,8 @@ CREATE TABLE siswa (
     status TEXT DEFAULT 'aktif',   -- aktif, lulus, pindah, keluar
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id)
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    UNIQUE(sekolah_id, nis)
 );
 ```
 
@@ -179,11 +210,13 @@ Tabel penghubung siswa dan kelas per tahun ajaran. Mendukung tracking mutasi.
 ```sql
 CREATE TABLE kelas_siswa (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
     siswa_id INTEGER NOT NULL,
     kelas_id INTEGER NOT NULL,
     tahun_ajaran_id INTEGER NOT NULL,
     status TEXT DEFAULT 'aktif',   -- aktif, lulus, pindah, keluar
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id),
     FOREIGN KEY (kelas_id) REFERENCES kelas(id),
     FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id)
@@ -239,8 +272,10 @@ CREATE TABLE pembayaran (
     jumlah DECIMAL(15,2) NOT NULL,
     tanggal DATE NOT NULL,
     metode TEXT NOT NULL,          -- transfer, cash, midtrans, xendit
+    provider TEXT,                  -- midtrans, xendit (NULL jika manual)
     bukti_bayar TEXT,              -- path file
     payment_gateway_id TEXT,       -- ID dari payment gateway
+    idempotency_key TEXT,          -- unique key untuk mencegah double processing
     status TEXT DEFAULT 'pending', -- pending, verified, rejected
     catatan TEXT,
     verified_by INTEGER,           -- pengguna ID yang verifikasi
@@ -248,9 +283,12 @@ CREATE TABLE pembayaran (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (tagihan_id) REFERENCES tagihan(id),
     FOREIGN KEY (siswa_id) REFERENCES siswa(id),
-    FOREIGN KEY (verified_by) REFERENCES pengguna(id)
+    FOREIGN KEY (verified_by) REFERENCES pengguna(id),
+    UNIQUE(provider, payment_gateway_id)
 );
 ```
+
+> **Invariant:** `SUM(pembayaran.jumlah WHERE status='verified' AND tagihan_id=X) <= tagihan.nominal`. Pembayaran yang menyebabkan overpay harus ditolak di level service dalam DB transaction.
 
 ### ppdb_pendaftaran
 Tabel pendaftar PPDB.
@@ -449,6 +487,15 @@ CREATE INDEX idx_pembayaran_tagihan_id ON pembayaran(tagihan_id);
 CREATE INDEX idx_pembayaran_siswa_id ON pembayaran(siswa_id);
 CREATE INDEX idx_pembayaran_status ON pembayaran(status);
 CREATE INDEX idx_pembayaran_tanggal ON pembayaran(tanggal);
+CREATE UNIQUE INDEX idx_pembayaran_gateway ON pembayaran(provider, payment_gateway_id);
+
+-- refresh_token
+CREATE INDEX idx_refresh_token_pengguna_id ON refresh_token(pengguna_id);
+CREATE INDEX idx_refresh_token_expires_at ON refresh_token(expires_at);
+
+-- login_attempt
+CREATE INDEX idx_login_attempt_email ON login_attempt(email);
+CREATE INDEX idx_login_attempt_created_at ON login_attempt(created_at);
 
 -- ppdb_pendaftaran
 CREATE INDEX idx_ppdb_pendaftaran_sekolah_id ON ppdb_pendaftaran(sekolah_id);
@@ -461,4 +508,7 @@ CREATE INDEX idx_ppdb_berkas_pendaftaran_id ON ppdb_berkas(pendaftaran_id);
 -- notifikasi_antrian
 CREATE INDEX idx_notifikasi_antrian_status ON notifikasi_antrian(status);
 CREATE INDEX idx_notifikasi_antrian_scheduled_at ON notifikasi_antrian(scheduled_at);
+
+-- kelas_siswa (tenant)
+CREATE INDEX idx_kelas_siswa_sekolah_id ON kelas_siswa(sekolah_id);
 ```

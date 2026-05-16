@@ -8,21 +8,53 @@ Aplikasi menggunakan beberapa lapisan keamanan untuk melindungi data sekolah.
 
 ## Autentikasi
 
-### JWT (JSON Web Token)
+### Session Strategy (Dual Cookie)
 
-- Token disimpan di httpOnly cookie
-- Masa berlaku: 24 jam
-- Tidak bisa diakses via JavaScript (anti-XSS)
+Aplikasi menggunakan dua httpOnly cookie untuk autentikasi:
+
+| Cookie | TTL | Path | Keterangan |
+|--------|-----|------|------------|
+| `access_token` | 15 menit | `/` | JWT berisi user ID, role, sekolah_id |
+| `refresh_token` | 7 hari | `/api/v1/auth/refresh` | Opaque token, hashed di DB |
+
+Kedua cookie di-set dengan flag:
+- `HttpOnly` — tidak bisa diakses JavaScript (anti-XSS)
+- `Secure` — hanya dikirim via HTTPS
+- `SameSite=Strict` — tidak dikirim cross-origin (anti-CSRF dasar)
 
 ### Login Flow
 
 ```
 1. User kirim email + password
-2. Backend hash password dengan bcrypt
-3. Bandingkan dengan hash di database
-4. Jika cocok, generate JWT token
-5. Set httpOnly cookie
-6. Return user data
+2. Backend cek account lockout
+3. Backend hash password dengan bcrypt, bandingkan dengan DB
+4. Jika gagal → catat di login_attempt, cek threshold lockout
+5. Jika cocok → generate access token (JWT, 15m) + refresh token (random, 7d)
+6. Simpan hash refresh token di tabel refresh_token
+7. Set dua httpOnly cookie (access_token + refresh_token)
+8. Return user data
+```
+
+### Refresh Flow
+
+```
+1. Access token expired → frontend dapat 401
+2. Frontend call POST /auth/refresh (cookie refresh_token otomatis terkirim)
+3. Backend baca refresh token dari cookie
+4. Cek hash token di DB: valid, belum expired, belum revoked
+5. Generate access token baru + refresh token baru (rotation)
+6. Revoke refresh token lama di DB
+7. Set dua cookie baru
+8. Return user data
+```
+
+Refresh token rotation memastikan token yang bocor hanya bisa dipakai sekali. Jika token lama dipakai setelah di-rotate, semua session user di-revoke (anomaly detection).
+
+### Logout & Revoke
+
+```
+1. POST /auth/logout → revoke refresh token di DB, hapus kedua cookie
+2. Admin bisa revoke semua session user via POST /auth/revoke-all/:user_id
 ```
 
 ### Password Policy
@@ -33,17 +65,13 @@ Aplikasi menggunakan beberapa lapisan keamanan untuk melindungi data sekolah.
 
 ### Token Refresh
 
-JWT access token memiliki masa berlaku pendek (15 menit). Untuk menjaga session tanpa login ulang:
+Lihat "Refresh Flow" di atas. Catatan penting:
 
-```
-1. Login → dapat access token (15 menit) + refresh token (7 hari)
-2. Access token expired → frontend kirim refresh token
-3. Backend validasi refresh token
-4. Generate access token baru
-5. Jika refresh token expired → user harus login ulang
-```
-
-Refresh token disimpan di database dan bisa di-revoke oleh admin.
+- Refresh token di-hash (SHA-256) sebelum disimpan di DB
+- Setiap refresh menghasilkan token baru (rotation)
+- Refresh token lama langsung di-revoke
+- Jika token lama dipakai setelah rotation → revoke semua session user (breach detection)
+- Path cookie refresh_token dibatasi ke `/api/v1/auth/refresh` agar tidak terkirim ke endpoint lain
 
 ### Account Lockout
 
@@ -119,6 +147,17 @@ Endpoint yang tidak perlu CSRF check:
 - `POST /api/v1/payment/callback/*` (validasi via signature dari payment gateway)
 - `POST /api/v1/auth/login` (belum punya cookie)
 - `POST /api/v1/auth/register`
+- `POST /api/v1/auth/refresh` (SameSite=Strict + path cookie terbatas, side effect hanya rotate token)
+
+---
+
+## Setup Guard
+
+Endpoint setup (`GET /setup/status`, `POST /setup`) hanya aktif jika database belum initialized. Setelah setup selesai, endpoint return 404. Ini mencegah:
+- Takeover: attacker re-run setup untuk buat admin baru
+- Re-konfigurasi: ubah modul/notifikasi tanpa otorisasi
+
+Mekanisme: middleware cek apakah tabel `sekolah` sudah punya data sebelum meneruskan request ke handler setup.
 
 ---
 

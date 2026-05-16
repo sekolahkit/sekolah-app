@@ -53,6 +53,24 @@ Buka browser dan akses `http://localhost:8080/setup`:
 5. **Notifikasi** — Konfigurasi WhatsApp/Telegram/Email
 6. **Selesai** — Aplikasi siap digunakan
 
+### Setup Guard
+
+Setup wizard hanya bisa dijalankan **satu kali**. Mekanisme:
+
+```
+1. Saat startup, cek apakah tabel `sekolah` sudah punya data
+2. Jika kosong → setup endpoints aktif (GET /setup/status, POST /setup)
+3. Jika sudah ada data → setup endpoints return 404
+4. Setelah POST /setup berhasil → flag initialized, endpoints mati
+```
+
+Ini mencegah:
+- Re-run setup setelah deploy (takeover)
+- Pembuatan admin baru tanpa otorisasi
+- Perubahan modul/konfigurasi via setup endpoint
+
+Jika perlu reset setup (misal development), hapus file database dan restart aplikasi.
+
 ---
 
 ## Instalasi Docker

@@ -153,8 +153,75 @@ SekolahApp menggunakan arsitektur monorepo dengan backend Go dan frontend React 
 ### 1. Monorepo dengan Embed
 Frontend di-embed ke binary Go menggunakan `//go:embed`. Hasil: satu file executable, deploy mudah.
 
-### 2. Multi-tenancy
+### 2. Multi-tenancy & Tenant Scoping Contract
+
 Setiap instalasi untuk satu sekolah (atau yayasan dengan beberapa sekolah). Selalu ada `sekolah_id` di tabel data.
+
+#### Contract
+
+Semua akses data **wajib** di-scope berdasarkan `sekolah_id` dari authenticated user. Ini bukan fitur opsional — ini invariant yang harus dipenuhi di setiap layer.
+
+#### Mekanisme
+
+```
+1. Auth middleware extract user dari JWT → simpan di context
+2. Context berisi: user_id, sekolah_id, role
+3. Semua repository method menerima sekolah_id sebagai parameter wajib
+4. Semua query di-filter WHERE sekolah_id = ?
+5. Endpoint by :id → setelah fetch record, cek record.sekolah_id == user.sekolah_id
+```
+
+#### Repository Pattern
+
+```go
+// WAJIB: sekolah_id sebagai parameter pertama
+func (r *SiswaRepository) FindByID(ctx context.Context, sekolahID int64, id int64) (*Siswa, error) {
+    return sq.Select("*").
+        From("siswa").
+        Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
+        RunWith(r.db).
+        QueryRowContext(ctx)
+}
+
+// WAJIB: list selalu scope by sekolah_id
+func (r *SiswaRepository) List(ctx context.Context, sekolahID int64, filter ListFilter) ([]Siswa, error) {
+    return sq.Select("*").
+        From("siswa").
+        Where(sq.Eq{"sekolah_id": sekolahID}).
+        RunWith(r.db).
+        QueryContext(ctx)
+}
+```
+
+#### Object-Level Authorization (Handler)
+
+```go
+func (h *SiswaHandler) GetByID(w http.ResponseWriter, r *http.Request) {
+    user := middleware.GetUser(r.Context())
+    id := chi.URLParam(r, "id")
+
+    siswa, err := h.service.FindByID(r.Context(), user.SekolahID, id)
+    if err != nil {
+        // FindByID sudah filter by sekolah_id
+        // Jika tidak ditemukan → 404 (bukan 403, untuk mencegah enumeration)
+        respond.Error(w, 404, "NOT_FOUND", "Siswa tidak ditemukan")
+        return
+    }
+
+    respond.JSON(w, 200, siswa)
+}
+```
+
+#### Aturan
+
+| Layer | Tanggung Jawab |
+|-------|----------------|
+| Middleware | Extract `sekolah_id` dari JWT, simpan di context |
+| Handler | Ambil `sekolah_id` dari context, pass ke service |
+| Service | Pass `sekolah_id` ke repository, enforce business rules |
+| Repository | **Selalu** filter query dengan `sekolah_id` |
+
+> **Tidak boleh** ada query yang fetch record by ID tanpa filter `sekolah_id`. Ini mencegah data leak lintas sekolah meskipun attacker tahu ID record.
 
 ### 3. RBAC (Role-Based Access Control)
 Role tetap: admin, operator, guru, siswa, orangtua. Setiap role punya izin berbeda.

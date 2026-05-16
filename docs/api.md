@@ -92,7 +92,9 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | POST | `/auth/login` | Login email/password | Public |
 | POST | `/auth/register` | Register user baru | Public |
 | POST | `/auth/google` | Login dengan Google | Public |
-| POST | `/auth/logout` | Logout | Auth |
+| POST | `/auth/logout` | Logout, revoke refresh token | Auth |
+| POST | `/auth/refresh` | Refresh access token (baca refresh_token dari cookie) | Public (cookie required) |
+| POST | `/auth/revoke-all/:user_id` | Revoke semua session user | Admin |
 | GET | `/auth/me` | Data user saat ini | Auth |
 | PUT | `/auth/password` | Ganti password | Auth |
 
@@ -194,8 +196,10 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
-| POST | `/payment/callback/midtrans` | Callback Midtrans | Public |
-| POST | `/payment/callback/xendit` | Callback Xendit | Public |
+| POST | `/payment/callback/midtrans` | Callback Midtrans (validasi SHA-512 signature) | Public |
+| POST | `/payment/callback/xendit` | Callback Xendit (validasi x-callback-token header) | Public |
+
+> **Catatan:** Endpoint callback tidak memerlukan auth cookie, tapi divalidasi via signature/token dari masing-masing provider. Callback bersifat idempotent — request dengan `payment_gateway_id` yang sudah diproses akan return 200 tanpa side effect.
 
 ### PPDB (Publik)
 
@@ -260,8 +264,10 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
-| GET | `/setup/status` | Cek status setup | Public |
-| POST | `/setup` | Jalankan setup wizard | Public |
+| GET | `/setup/status` | Cek status setup | Public (hanya aktif jika belum initialized) |
+| POST | `/setup` | Jalankan setup wizard | Public (hanya aktif jika belum initialized) |
+
+> **Setup Guard:** Kedua endpoint ini hanya aktif selama database belum initialized (tabel `sekolah` kosong). Setelah setup selesai, endpoint akan return `404 Not Found`. Ini mencegah takeover atau re-setup setelah deploy.
 
 ### Upload
 
@@ -320,7 +326,40 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 }
 ```
 
-Set-Cookie: `token=eyJhbG...; HttpOnly; Secure; SameSite=Strict; Path=/`
+Cookies yang di-set:
+```
+Set-Cookie: access_token=eyJhbG...; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=900
+Set-Cookie: refresh_token=rft_abc...; HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth/refresh; Max-Age=604800
+```
+
+---
+
+### POST /auth/refresh
+
+Refresh access token. Refresh token dibaca dari cookie (bukan body).
+
+**Request:** (tidak ada body, refresh_token dikirim otomatis via cookie)
+
+**Response (200):**
+```json
+{
+    "data": {
+        "id": 1,
+        "nama": "Admin Sekolah",
+        "email": "admin@sekolah.id",
+        "role": "admin",
+        "sekolah_id": 1
+    }
+}
+```
+
+Cookies yang di-set (rotation):
+```
+Set-Cookie: access_token=eyJhbG...(baru); HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=900
+Set-Cookie: refresh_token=rft_def...(baru); HttpOnly; Secure; SameSite=Strict; Path=/api/v1/auth/refresh; Max-Age=604800
+```
+
+> **CSRF:** Endpoint ini aman dari CSRF karena `SameSite=Strict` + path cookie dibatasi ke `/api/v1/auth/refresh`. Tidak ada state-changing side effect selain rotate token.
 
 ---
 
