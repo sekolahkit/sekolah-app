@@ -102,10 +102,16 @@ func (r *Repository) GetDashboardStats(sekolahID int64) (*DashboardStats, error)
 	return stats, nil
 }
 
-func (r *Repository) GetRekapPembayaran(sekolahID int64, tanggalMulai, tanggalSelesai string) ([]RekapPembayaranItem, error) {
-	rows, err := r.db.Query(
-		"SELECT date(p.tanggal) as tgl, p.metode, COUNT(*) as total_transaksi, SUM(p.jumlah) as total_nominal FROM pembayaran p JOIN tagihan t ON p.tagihan_id = t.id WHERE t.sekolah_id = ? AND p.status = 'verified' AND p.tanggal >= ? AND p.tanggal <= ? GROUP BY tgl, p.metode ORDER BY tgl DESC",
-		sekolahID, tanggalMulai, tanggalSelesai)
+func (r *Repository) GetRekapPembayaran(sekolahID int64, tanggalMulai, tanggalSelesai string, tahunAjaranID int64) ([]RekapPembayaranItem, error) {
+	query := "SELECT date(p.tanggal) as tgl, p.metode, COUNT(*) as total_transaksi, SUM(p.jumlah) as total_nominal FROM pembayaran p JOIN tagihan t ON p.tagihan_id = t.id WHERE t.sekolah_id = ? AND p.status = 'verified' AND p.tanggal >= ? AND p.tanggal <= ?"
+	args := []interface{}{sekolahID, tanggalMulai, tanggalSelesai}
+	if tahunAjaranID > 0 {
+		query += " AND t.tahun_ajaran_id = ?"
+		args = append(args, tahunAjaranID)
+	}
+	query += " GROUP BY tgl, p.metode ORDER BY tgl DESC"
+
+	rows, err := r.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -159,14 +165,16 @@ func (r *Repository) GetRekapPPDB(sekolahID int64, tahunAjaranID int64) (*RekapP
 	return rekap, nil
 }
 
-func (r *Repository) GetRekapSiswa(sekolahID int64) (*RekapSiswa, error) {
+func (r *Repository) GetRekapSiswa(sekolahID int64, tahunAjaranID int64) (*RekapSiswa, error) {
 	rekap := &RekapSiswa{}
 
-	rows, err := sq.Select("status", "COUNT(*)").
+	statusQuery := sq.Select("status", "COUNT(*)").
 		From("siswa").
-		Where(sq.Eq{"sekolah_id": sekolahID}).
-		GroupBy("status").
-		RunWith(r.db).Query()
+		Where(sq.Eq{"sekolah_id": sekolahID})
+	if tahunAjaranID > 0 {
+		statusQuery = statusQuery.Where(sq.Eq{"tahun_ajaran_masuk": tahunAjaranID})
+	}
+	rows, err := statusQuery.GroupBy("status").RunWith(r.db).Query()
 	if err != nil {
 		return nil, err
 	}
@@ -191,11 +199,13 @@ func (r *Repository) GetRekapSiswa(sekolahID int64) (*RekapSiswa, error) {
 		}
 	}
 
-	genderRows, err := sq.Select("jenis_kelamin", "COUNT(*)").
+	genderQuery := sq.Select("jenis_kelamin", "COUNT(*)").
 		From("siswa").
-		Where(sq.Eq{"sekolah_id": sekolahID}).
-		GroupBy("jenis_kelamin").
-		RunWith(r.db).Query()
+		Where(sq.Eq{"sekolah_id": sekolahID})
+	if tahunAjaranID > 0 {
+		genderQuery = genderQuery.Where(sq.Eq{"tahun_ajaran_masuk": tahunAjaranID})
+	}
+	genderRows, err := genderQuery.GroupBy("jenis_kelamin").RunWith(r.db).Query()
 	if err != nil {
 		return nil, err
 	}

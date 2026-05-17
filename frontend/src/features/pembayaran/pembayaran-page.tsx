@@ -22,11 +22,24 @@ export function PembayaranPage() {
 function AdminPembayaranView() {
   const [tab, setTab] = useState<'tagihan' | 'verifikasi'>('tagihan')
   const [exporting, setExporting] = useState(false)
+  const [statusFilter, setStatusFilter] = useState('')
+  const [tahunAjaranFilter, setTahunAjaranFilter] = useState('')
+  const [search, setSearch] = useState('')
+  const { data: taAktif } = useTahunAjaranAktif()
+
+  const effectiveTA = tahunAjaranFilter || (taAktif?.id ? String(taAktif.id) : '')
 
   async function handleExport() {
     setExporting(true)
     try {
-      await downloadExport('/pembayaran/export', 'pembayaran.xlsx')
+      let url = '/pembayaran/export'
+      const params = new URLSearchParams()
+      if (effectiveTA) params.set('tahun_ajaran_id', effectiveTA)
+      if (statusFilter) params.set('status', statusFilter)
+      if (search) params.set('search', search)
+      const qs = params.toString()
+      if (qs) url += `?${qs}`
+      await downloadExport(url, 'pembayaran.xlsx')
     } catch { /* endpoint may not exist yet */ }
     setExporting(false)
   }
@@ -44,16 +57,19 @@ function AdminPembayaranView() {
           Ekspor
         </button>
       </div>
-      {tab === 'tagihan' ? <TagihanSection /> : <VerifikasiSection />}
+      {tab === 'tagihan' ? (
+        <TagihanSection
+          statusFilter={statusFilter} setStatusFilter={setStatusFilter}
+          tahunAjaranFilter={tahunAjaranFilter} setTahunAjaranFilter={setTahunAjaranFilter}
+          search={search} setSearch={setSearch}
+        />
+      ) : <VerifikasiSection />}
     </>
   )
 }
 
-function TagihanSection() {
+function TagihanSection({ statusFilter, setStatusFilter, tahunAjaranFilter, setTahunAjaranFilter, search, setSearch }: { statusFilter: string; setStatusFilter: (v: string) => void; tahunAjaranFilter: string; setTahunAjaranFilter: (v: string) => void; search: string; setSearch: (v: string) => void }) {
   const [page, setPage] = useState(1)
-  const [statusFilter, setStatusFilter] = useState('')
-  const [tahunAjaranFilter, setTahunAjaranFilter] = useState('')
-  const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
   const { data: taList } = useTahunAjaranList()

@@ -22,7 +22,14 @@ export function PpdbAdminPage() {
   async function handleExport() {
     setExporting(true)
     try {
-      await downloadExport('/ppdb/export', 'data-ppdb.xlsx')
+      let url = '/ppdb/export'
+      const params = new URLSearchParams()
+      if (effectiveTA) params.set('tahun_ajaran_id', effectiveTA)
+      if (statusFilter) params.set('status', statusFilter)
+      if (search) params.set('search', search)
+      const qs = params.toString()
+      if (qs) url += `?${qs}`
+      await downloadExport(url, 'data-ppdb.xlsx')
     } catch { /* endpoint may not exist */ }
     setExporting(false)
   }
