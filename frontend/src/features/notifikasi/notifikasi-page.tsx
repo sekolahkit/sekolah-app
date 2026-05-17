@@ -1,8 +1,9 @@
 import { useState } from 'react'
 import { useNotifikasiList, useQueueStats, useTestSend, useRetryNotifikasi } from '@/hooks/use-notifikasi'
 import { usePreferensiList, useUpsertPreferensi, useGenerateTelegramInvite } from '@/hooks/use-notifikasi-preferensi'
+import { useWhatsAppStatus, useWhatsAppConnect, useWhatsAppDisconnect } from '@/hooks/use-whatsapp'
 import { cn } from '@/lib/utils'
-import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw, Shield } from 'lucide-react'
+import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw, Shield, Wifi, WifiOff } from 'lucide-react'
 import type { Notifikasi } from '@/hooks/use-notifikasi'
 import type { NotifikasiPreferensi } from '@/hooks/use-notifikasi-preferensi'
 
@@ -20,6 +21,8 @@ export function NotifikasiPage() {
           <button onClick={() => setTab('preferensi')} className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors', tab === 'preferensi' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>Preferensi</button>
         </div>
       </div>
+
+      <WhatsAppStatusCard />
 
       {tab === 'queue' ? <QueueTab /> : <PreferensiTab />}
     </div>
@@ -512,5 +515,57 @@ function ConsentBadge({ status }: { status: string }) {
     <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', styles[status] || 'bg-muted text-muted-foreground')}>
       {status}
     </span>
+  )
+}
+
+function WhatsAppStatusCard() {
+  const { data: waStatus } = useWhatsAppStatus()
+  const connect = useWhatsAppConnect()
+  const disconnect = useWhatsAppDisconnect()
+
+  if (!waStatus) return null
+
+  const isConnected = waStatus.connected && waStatus.status === 'connected'
+  const isWaitingQR = waStatus.status === 'waiting_qr'
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {isConnected ? (
+            <Wifi className="h-5 w-5 text-primary" />
+          ) : (
+            <WifiOff className="h-5 w-5 text-muted-foreground" />
+          )}
+          <div>
+            <p className="text-sm font-medium text-card-foreground">
+              WhatsApp: {isConnected ? 'Terhubung' : isWaitingQR ? 'Menunggu QR' : 'Terputus'}
+            </p>
+            {waStatus.last_error && (
+              <p className="text-xs text-destructive mt-0.5">{waStatus.last_error}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex items-center gap-2">
+          {isConnected ? (
+            <button
+              onClick={() => disconnect.mutate()}
+              disabled={disconnect.isPending}
+              className="rounded-md border border-border px-3 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            >
+              Putus
+            </button>
+          ) : (
+            <button
+              onClick={() => connect.mutate()}
+              disabled={connect.isPending}
+              className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {connect.isPending ? 'Menghubungkan...' : 'Hubungkan'}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
   )
 }

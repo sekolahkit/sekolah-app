@@ -147,6 +147,17 @@ func (r *Repository) ResetForRetry(id int64) error {
 	return err
 }
 
+func (r *Repository) Reschedule(id int64, scheduledAt, lastError string) error {
+	_, err := sq.Update("notifikasi_antrian").
+		Set("status", "pending").
+		Set("last_error", lastError).
+		Set("scheduled_at", scheduledAt).
+		Set("claimed_at", nil).
+		Where(sq.Eq{"id": id}).
+		RunWith(r.db).Exec()
+	return err
+}
+
 func (r *Repository) ClaimPending(limit int) ([]Notifikasi, error) {
 	claimToken := time.Now().UTC().Format("2006-01-02 15:04:05.000000000")
 
