@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useAuth } from '@/hooks/use-auth-hook'
 import { useTagihanList, useCreateTagihan, useBulkCreateTagihan, usePembayaranList, useVerifyPembayaran, useRejectPembayaran, useCreatePembayaran, useRekeningAktif } from '@/hooks/use-pembayaran'
+import { useTahunAjaranList, useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { cn } from '@/lib/utils'
 import { Plus, Check, X, CreditCard, Search, Users, Download, Loader2 } from 'lucide-react'
 import { SiswaPicker, SiswaMultiPicker } from '@/components/ui/siswa-picker'
@@ -343,6 +344,8 @@ function BayarDialog({ tagihan, rekening, onClose }: { tagihan: Tagihan; rekenin
 
 function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
   const createMutation = useCreateTagihan()
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
   const [error, setError] = useState('')
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa | null>(null)
   const [form, setForm] = useState({
@@ -353,6 +356,10 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
     semester: '',
     catatan: '',
   })
+
+  if (!form.tahun_ajaran_id && taAktif?.id) {
+    setForm((f) => ({ ...f, tahun_ajaran_id: String(taAktif.id) }))
+  }
 
   function handleChange(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -405,8 +412,13 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
               <input type="number" value={form.kategori_id} onChange={(e) => handleChange('kategori_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
-              <input type="number" value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+              <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran</label>
+              <select value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+                <option value="">Pilih tahun ajaran</option>
+                {taList?.map((ta) => (
+                  <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">
@@ -450,6 +462,8 @@ function CreateTagihanDialog({ onClose }: { onClose: () => void }) {
 
 function BulkTagihanDialog({ onClose }: { onClose: () => void }) {
   const bulkMutation = useBulkCreateTagihan()
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
   const [error, setError] = useState('')
   const [selectedSiswa, setSelectedSiswa] = useState<Siswa[]>([])
   const [showConfirm, setShowConfirm] = useState(false)
@@ -461,6 +475,10 @@ function BulkTagihanDialog({ onClose }: { onClose: () => void }) {
     semester: '',
     catatan: '',
   })
+
+  if (!form.tahun_ajaran_id && taAktif?.id) {
+    setForm((f) => ({ ...f, tahun_ajaran_id: String(taAktif.id) }))
+  }
 
   function handleChange(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -525,8 +543,13 @@ function BulkTagihanDialog({ onClose }: { onClose: () => void }) {
               <input type="number" value={form.kategori_id} onChange={(e) => handleChange('kategori_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
-              <input type="number" value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+              <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran</label>
+              <select value={form.tahun_ajaran_id} onChange={(e) => handleChange('tahun_ajaran_id', e.target.value)} required className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+                <option value="">Pilih tahun ajaran</option>
+                {taList?.map((ta) => (
+                  <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+                ))}
+              </select>
             </div>
           </div>
           <div className="grid grid-cols-2 gap-3">

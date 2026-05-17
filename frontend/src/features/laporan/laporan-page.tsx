@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useRekapPembayaran, useRekapPPDB, useRekapSiswa } from '@/hooks/use-laporan'
+import { useTahunAjaranList, useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { cn } from '@/lib/utils'
 import { BarChart3, Users, GraduationCap, Download, Loader2 } from 'lucide-react'
 import { downloadExport } from '@/lib/export'
@@ -110,14 +111,19 @@ function LaporanPembayaran() {
 }
 
 function LaporanPPDB() {
-  const [tahunAjaranId, setTahunAjaranId] = useState(1)
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
+  const [tahunAjaranId, setTahunAjaranId] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
-  const { data, isLoading } = useRekapPPDB(tahunAjaranId)
+
+  const activeId = tahunAjaranId ?? taAktif?.id ?? 0
+  const { data, isLoading } = useRekapPPDB(activeId)
 
   async function handleExport() {
+    if (!activeId) return
     setExporting(true)
     try {
-      await downloadExport(`/laporan/ppdb/export?tahun_ajaran_id=${tahunAjaranId}`, 'laporan-ppdb.xlsx')
+      await downloadExport(`/laporan/ppdb/export?tahun_ajaran_id=${activeId}`, 'laporan-ppdb.xlsx')
     } catch { /* endpoint may not exist */ }
     setExporting(false)
   }
@@ -126,8 +132,13 @@ function LaporanPPDB() {
     <div className="space-y-4">
       <div className="flex items-center gap-3 flex-wrap">
         <div className="space-y-1">
-          <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran ID</label>
-          <input type="number" value={tahunAjaranId} onChange={(e) => setTahunAjaranId(Number(e.target.value))} min={1} className="w-32 rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" />
+          <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran</label>
+          <select value={activeId || ''} onChange={(e) => setTahunAjaranId(Number(e.target.value) || null)} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+            <option value="">Pilih tahun ajaran</option>
+            {taList?.map((ta) => (
+              <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+            ))}
+          </select>
         </div>
         <button onClick={handleExport} disabled={exporting} className="mt-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
