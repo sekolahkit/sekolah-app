@@ -272,6 +272,7 @@ func main() {
 				Port:     secrets.SMTPPort,
 				User:     secrets.SMTPUser,
 				Password: secrets.SMTPPassword,
+				From:     secrets.SMTPFrom,
 			}))
 		}
 		if cfg.Notifikasi.Telegram {

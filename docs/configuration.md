@@ -85,6 +85,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-app-password
+SMTP_FROM=noreply@sekolah.com  # opsional, fallback ke SMTP_USER
 
 # Telegram Bot (opsional)
 TELEGRAM_BOT_TOKEN=
