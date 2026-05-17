@@ -262,6 +262,10 @@ func main() {
 		notifService := notifikasi.NewService(notifRepo)
 		notifHandler := notifikasi.NewHandler(notifService)
 
+		prefRepo := notifikasi.NewPreferensiRepository(db)
+		prefService := notifikasi.NewPreferensiService(prefRepo)
+		prefHandler := notifikasi.NewPreferensiHandler(prefService)
+
 		registry := notifikasi.NewRegistry()
 		if cfg.Notifikasi.WhatsApp {
 			registry.Register(notifikasi.NewWhatsAppProvider())
@@ -279,7 +283,8 @@ func main() {
 			registry.Register(notifikasi.NewTelegramProvider(secrets.TelegramBotToken))
 		}
 
-		worker := notifikasi.NewWorker(notifRepo, registry, notifikasi.DefaultWorkerConfig())
+		worker := notifikasi.NewWorker(notifRepo, registry, notifikasi.DefaultWorkerConfig()).
+			WithPreferensi(prefRepo)
 		go worker.Start(workerCtx)
 
 		r.Group(func(r chi.Router) {
@@ -290,6 +295,7 @@ func main() {
 			r.Post("/notifikasi/test", notifHandler.TestSend)
 			r.Get("/notifikasi/queue", notifHandler.QueueStatus)
 			r.Post("/notifikasi/{id}/retry", notifHandler.Retry)
+			notifikasi.RegisterPreferensiRoutes(r, prefHandler)
 		})
 
 		laporanRepo := laporan.NewRepository(db)

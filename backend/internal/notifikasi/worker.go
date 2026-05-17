@@ -26,10 +26,11 @@ func DefaultWorkerConfig() WorkerConfig {
 }
 
 type Worker struct {
-	repo     *Repository
-	registry *Registry
-	cfg      WorkerConfig
-	logger   *slog.Logger
+	repo       *Repository
+	registry   *Registry
+	preferensi *PreferensiRepository
+	cfg        WorkerConfig
+	logger     *slog.Logger
 }
 
 func NewWorker(repo *Repository, registry *Registry, cfg WorkerConfig) *Worker {
@@ -39,6 +40,11 @@ func NewWorker(repo *Repository, registry *Registry, cfg WorkerConfig) *Worker {
 		cfg:      cfg,
 		logger:   slog.Default().With("component", "notification-worker"),
 	}
+}
+
+func (w *Worker) WithPreferensi(prefRepo *PreferensiRepository) *Worker {
+	w.preferensi = prefRepo
+	return w
 }
 
 func (w *Worker) Start(ctx context.Context) {
@@ -108,6 +114,14 @@ func (w *Worker) processBatch(ctx context.Context) {
 }
 
 func (w *Worker) processItem(n *Notifikasi) {
+	if w.preferensi != nil {
+		allowed, reason := w.preferensi.CanSend(n.SekolahID, n.Tipe, n.Penerima)
+		if !allowed {
+			w.markFailed(n, fmt.Sprintf("consent blocked: %s", reason))
+			return
+		}
+	}
+
 	provider, err := w.registry.Get(n.Tipe)
 	if err != nil {
 		w.markFailed(n, fmt.Sprintf("provider error: %v", err))

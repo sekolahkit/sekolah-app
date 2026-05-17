@@ -1,10 +1,32 @@
 import { useState } from 'react'
 import { useNotifikasiList, useQueueStats, useTestSend, useRetryNotifikasi } from '@/hooks/use-notifikasi'
+import { usePreferensiList, useUpsertPreferensi } from '@/hooks/use-notifikasi-preferensi'
 import { cn } from '@/lib/utils'
-import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw } from 'lucide-react'
+import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw, Shield } from 'lucide-react'
 import type { Notifikasi } from '@/hooks/use-notifikasi'
+import type { NotifikasiPreferensi } from '@/hooks/use-notifikasi-preferensi'
+
+type Tab = 'queue' | 'preferensi'
 
 export function NotifikasiPage() {
+  const [tab, setTab] = useState<Tab>('queue')
+
+  return (
+    <div className="p-6 space-y-6">
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-foreground">Notifikasi</h1>
+        <div className="flex items-center gap-1 rounded-lg border border-border p-0.5">
+          <button onClick={() => setTab('queue')} className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors', tab === 'queue' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>Queue</button>
+          <button onClick={() => setTab('preferensi')} className={cn('rounded-md px-3 py-1.5 text-sm font-medium transition-colors', tab === 'preferensi' ? 'bg-muted text-foreground' : 'text-muted-foreground hover:text-foreground')}>Preferensi</button>
+        </div>
+      </div>
+
+      {tab === 'queue' ? <QueueTab /> : <PreferensiTab />}
+    </div>
+  )
+}
+
+function QueueTab() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
   const [tipeFilter, setTipeFilter] = useState('')
@@ -19,9 +41,8 @@ export function NotifikasiPage() {
   })
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-foreground">Notifikasi</h1>
+    <div className="space-y-6">
+      <div className="flex items-center justify-end">
         <button onClick={() => setShowTestForm(true)} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
           <Send className="h-4 w-4" /> Test Kirim
         </button>
@@ -90,6 +111,218 @@ export function NotifikasiPage() {
       )}
 
       {showTestForm && <TestSendDialog onClose={() => setShowTestForm(false)} />}
+    </div>
+  )
+}
+
+function PreferensiTab() {
+  const [page, setPage] = useState(1)
+  const [channelFilter, setChannelFilter] = useState('')
+  const [consentFilter, setConsentFilter] = useState('')
+  const [showForm, setShowForm] = useState(false)
+
+  const { data, isLoading } = usePreferensiList({
+    page,
+    limit: 20,
+    channel: channelFilter || undefined,
+    consent_status: consentFilter || undefined,
+  })
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <p className="text-sm text-muted-foreground">Kelola persetujuan penerima notifikasi per kanal.</p>
+        <button onClick={() => setShowForm(true)} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
+          <Shield className="h-4 w-4" /> Tambah Preferensi
+        </button>
+      </div>
+
+      <div className="flex items-center gap-2 flex-wrap">
+        <select value={channelFilter} onChange={(e) => { setChannelFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+          <option value="">Semua Kanal</option>
+          <option value="email">Email</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="telegram">Telegram</option>
+        </select>
+        <select value={consentFilter} onChange={(e) => { setConsentFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+          <option value="">Semua Status</option>
+          <option value="granted">Granted</option>
+          <option value="pending">Pending</option>
+          <option value="revoked">Revoked</option>
+        </select>
+      </div>
+
+      {isLoading ? (
+        <div className="text-center text-muted-foreground">Memuat...</div>
+      ) : !data?.data?.length ? (
+        <div className="text-center text-muted-foreground">Belum ada preferensi.</div>
+      ) : (
+        <>
+          <div className="overflow-x-auto rounded-lg border border-border">
+            <table className="w-full text-sm">
+              <thead className="border-b border-border bg-muted/50">
+                <tr>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Kanal</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Tujuan</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Tipe</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Konsen</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Sumber</th>
+                  <th className="px-4 py-3 text-right font-medium text-muted-foreground">Aksi</th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.data.map((p: NotifikasiPreferensi) => (
+                  <PreferensiRow key={p.id} preferensi={p} />
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {data.meta && data.meta.total_pages > 1 && (
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>Halaman {data.meta.page} dari {data.meta.total_pages}</span>
+              <div className="flex gap-2">
+                <button disabled={page <= 1} onClick={() => setPage(page - 1)} className="rounded border border-border px-3 py-1 hover:bg-muted disabled:opacity-50">Sebelumnya</button>
+                <button disabled={page >= data.meta.total_pages} onClick={() => setPage(page + 1)} className="rounded border border-border px-3 py-1 hover:bg-muted disabled:opacity-50">Berikutnya</button>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {showForm && <PreferensiForm onClose={() => setShowForm(false)} />}
+    </div>
+  )
+}
+
+function PreferensiRow({ preferensi: p }: { preferensi: NotifikasiPreferensi }) {
+  const upsert = useUpsertPreferensi()
+
+  function toggleEnabled() {
+    upsert.mutate({
+      channel: p.channel,
+      destination: p.destination,
+      recipient_type: p.recipient_type,
+      enabled: !p.enabled,
+      consent_status: p.consent_status,
+      consent_source: p.consent_source,
+    })
+  }
+
+  function toggleConsent() {
+    const next = p.consent_status === 'granted' ? 'revoked' : 'granted'
+    upsert.mutate({
+      channel: p.channel,
+      destination: p.destination,
+      recipient_type: p.recipient_type,
+      enabled: p.enabled,
+      consent_status: next,
+      consent_source: 'admin',
+    })
+  }
+
+  return (
+    <tr className="border-b border-border last:border-0 hover:bg-muted/30">
+      <td className="px-4 py-3"><ChannelBadge channel={p.channel} /></td>
+      <td className="px-4 py-3 text-foreground font-mono text-xs">{p.destination}</td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">{p.recipient_type}</td>
+      <td className="px-4 py-3">
+        <button onClick={toggleEnabled} disabled={upsert.isPending} className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium cursor-pointer', p.enabled ? 'bg-primary/10 text-primary' : 'bg-muted text-muted-foreground')}>
+          {p.enabled ? 'Aktif' : 'Nonaktif'}
+        </button>
+      </td>
+      <td className="px-4 py-3">
+        <ConsentBadge status={p.consent_status} />
+      </td>
+      <td className="px-4 py-3 text-xs text-muted-foreground">{p.consent_source}</td>
+      <td className="px-4 py-3 text-right">
+        <button onClick={toggleConsent} disabled={upsert.isPending} className="rounded bg-muted p-1.5 hover:bg-accent" title={p.consent_status === 'granted' ? 'Revoke' : 'Grant'}>
+          <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+        </button>
+      </td>
+    </tr>
+  )
+}
+
+function PreferensiForm({ onClose }: { onClose: () => void }) {
+  const upsert = useUpsertPreferensi()
+  const [channel, setChannel] = useState('email')
+  const [destination, setDestination] = useState('')
+  const [recipientType, setRecipientType] = useState('manual')
+  const [consentStatus, setConsentStatus] = useState('granted')
+  const [error, setError] = useState('')
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault()
+    setError('')
+    try {
+      await upsert.mutateAsync({
+        channel,
+        destination,
+        recipient_type: recipientType,
+        consent_status: consentStatus,
+        consent_source: 'admin',
+      })
+      onClose()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal menyimpan preferensi')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-card-foreground">Tambah Preferensi</h2>
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-3">
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Kanal</label>
+            <select value={channel} onChange={(e) => setChannel(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+              <option value="email">Email</option>
+              <option value="whatsapp">WhatsApp</option>
+              <option value="telegram">Telegram</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Tujuan</label>
+            <input type="text" value={destination} onChange={(e) => setDestination(e.target.value)} required placeholder="email@example.com / 081234567890" className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring" />
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Tipe Penerima</label>
+            <select value={recipientType} onChange={(e) => setRecipientType(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+              <option value="manual">Manual</option>
+              <option value="pengguna">Pengguna</option>
+              <option value="siswa">Siswa</option>
+              <option value="calon_siswa">Calon Siswa</option>
+            </select>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Persetujuan</label>
+            <select value={consentStatus} onChange={(e) => setConsentStatus(e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+              <option value="granted">Granted</option>
+              <option value="pending">Pending</option>
+              <option value="revoked">Revoked</option>
+            </select>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
+            <button type="submit" disabled={upsert.isPending} className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              {upsert.isPending ? 'Menyimpan...' : 'Simpan'}
+            </button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
@@ -172,7 +405,7 @@ function NotifikasiRow({ notifikasi: n }: { notifikasi: Notifikasi }) {
 
   return (
     <tr className="border-b border-border last:border-0 hover:bg-muted/30">
-      <td className="px-4 py-3"><TipeBadge tipe={n.tipe} /></td>
+      <td className="px-4 py-3"><ChannelBadge channel={n.tipe} /></td>
       <td className="px-4 py-3 text-foreground font-mono text-xs">{n.penerima}</td>
       <td className="px-4 py-3 text-foreground max-w-[200px] truncate">{n.pesan}</td>
       <td className="px-4 py-3"><StatusBadge status={n.status} /></td>
@@ -220,15 +453,28 @@ function StatusBadge({ status }: { status: string }) {
   )
 }
 
-function TipeBadge({ tipe }: { tipe: string }) {
+function ChannelBadge({ channel }: { channel: string }) {
   const styles: Record<string, string> = {
     whatsapp: 'bg-primary/10 text-primary',
     telegram: 'bg-accent text-accent-foreground',
     email: 'bg-secondary text-secondary-foreground',
   }
   return (
-    <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', styles[tipe] || 'bg-muted text-muted-foreground')}>
-      {tipe}
+    <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', styles[channel] || 'bg-muted text-muted-foreground')}>
+      {channel}
+    </span>
+  )
+}
+
+function ConsentBadge({ status }: { status: string }) {
+  const styles: Record<string, string> = {
+    granted: 'bg-primary/10 text-primary',
+    pending: 'bg-muted text-muted-foreground',
+    revoked: 'bg-destructive/10 text-destructive',
+  }
+  return (
+    <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', styles[status] || 'bg-muted text-muted-foreground')}>
+      {status}
     </span>
   )
 }
