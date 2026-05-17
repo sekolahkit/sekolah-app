@@ -36,7 +36,9 @@ export function SiswaPage() {
   async function handleExport() {
     setExporting(true)
     try {
-      await downloadExport('/siswa/export', 'data-siswa.xlsx')
+      let url = '/siswa/export'
+      if (search) url += `?search=${encodeURIComponent(search)}`
+      await downloadExport(url, 'data-siswa.xlsx')
     } catch { /* stub endpoint */ }
     setExporting(false)
   }

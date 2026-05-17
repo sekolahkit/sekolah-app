@@ -29,12 +29,12 @@ export interface RekapSiswa {
   perempuan: number
 }
 
-export function useRekapPembayaran(tanggalMulai: string, tanggalSelesai: string) {
+export function useRekapPembayaran(tanggalMulai: string, tanggalSelesai: string, tahunAjaranId?: number) {
   return useQuery({
-    queryKey: ['laporan-pembayaran', tanggalMulai, tanggalSelesai],
+    queryKey: ['laporan-pembayaran', tanggalMulai, tanggalSelesai, tahunAjaranId],
     queryFn: async () => {
       const res = await api.get<ApiResponse<RekapPembayaranItem[]>>('/laporan/pembayaran', {
-        params: { tanggal_mulai: tanggalMulai, tanggal_selesai: tanggalSelesai },
+        params: { tanggal_mulai: tanggalMulai, tanggal_selesai: tanggalSelesai, tahun_ajaran_id: tahunAjaranId || undefined },
       })
       return res.data.data
     },
@@ -55,11 +55,13 @@ export function useRekapPPDB(tahunAjaranId: number) {
   })
 }
 
-export function useRekapSiswa() {
+export function useRekapSiswa(tahunAjaranId?: number) {
   return useQuery({
-    queryKey: ['laporan-siswa'],
+    queryKey: ['laporan-siswa', tahunAjaranId],
     queryFn: async () => {
-      const res = await api.get<ApiResponse<RekapSiswa>>('/laporan/siswa')
+      const res = await api.get<ApiResponse<RekapSiswa>>('/laporan/siswa', {
+        params: { tahun_ajaran_id: tahunAjaranId || undefined },
+      })
       return res.data.data
     },
   })

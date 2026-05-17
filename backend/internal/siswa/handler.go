@@ -124,6 +124,7 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	_ = r.URL.Query().Get("tahun_ajaran_id")
 	response.JSON(w, 200, map[string]string{"message": "Export endpoint - coming soon"})
 }
 

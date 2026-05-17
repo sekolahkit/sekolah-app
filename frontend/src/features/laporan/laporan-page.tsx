@@ -41,9 +41,14 @@ function LaporanPembayaran() {
 
   const [tanggalMulai, setTanggalMulai] = useState(firstDay)
   const [tanggalSelesai, setTanggalSelesai] = useState(lastDay)
+  const [tahunAjaranId, setTahunAjaranId] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
 
-  const { data, isLoading } = useRekapPembayaran(tanggalMulai, tanggalSelesai)
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
+
+  const effectiveTA = tahunAjaranId ?? taAktif?.id ?? 0
+  const { data, isLoading } = useRekapPembayaran(tanggalMulai, tanggalSelesai, effectiveTA)
 
   const totalNominal = data?.reduce((sum, item) => sum + item.total_nominal, 0) ?? 0
   const totalTransaksi = data?.reduce((sum, item) => sum + item.total_transaksi, 0) ?? 0
@@ -51,7 +56,9 @@ function LaporanPembayaran() {
   async function handleExport() {
     setExporting(true)
     try {
-      await downloadExport(`/laporan/pembayaran/export?tanggal_mulai=${tanggalMulai}&tanggal_selesai=${tanggalSelesai}`, 'laporan-pembayaran.xlsx')
+      let url = `/laporan/pembayaran/export?tanggal_mulai=${tanggalMulai}&tanggal_selesai=${tanggalSelesai}`
+      if (effectiveTA) url += `&tahun_ajaran_id=${effectiveTA}`
+      await downloadExport(url, 'laporan-pembayaran.xlsx')
     } catch { /* endpoint may not exist */ }
     setExporting(false)
   }
@@ -66,6 +73,15 @@ function LaporanPembayaran() {
         <div className="space-y-1">
           <label className="text-xs font-medium text-muted-foreground">Sampai</label>
           <input type="date" value={tanggalSelesai} onChange={(e) => setTanggalSelesai(e.target.value)} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground" />
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran</label>
+          <select value={effectiveTA || ''} onChange={(e) => setTahunAjaranId(Number(e.target.value) || null)} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+            <option value="">Semua Tahun</option>
+            {taList?.map((ta) => (
+              <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+            ))}
+          </select>
         </div>
         <button onClick={handleExport} disabled={exporting} className="mt-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
@@ -166,13 +182,21 @@ function LaporanPPDB() {
 }
 
 function LaporanSiswa() {
-  const { data, isLoading } = useRekapSiswa()
+  const [tahunAjaranId, setTahunAjaranId] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
+
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
+
+  const effectiveTA = tahunAjaranId ?? taAktif?.id ?? 0
+  const { data, isLoading } = useRekapSiswa(effectiveTA || undefined)
 
   async function handleExport() {
     setExporting(true)
     try {
-      await downloadExport('/laporan/siswa/export', 'laporan-siswa.xlsx')
+      let url = '/laporan/siswa/export'
+      if (effectiveTA) url += `?tahun_ajaran_id=${effectiveTA}`
+      await downloadExport(url, 'laporan-siswa.xlsx')
     } catch { /* endpoint may not exist */ }
     setExporting(false)
   }
@@ -182,8 +206,17 @@ function LaporanSiswa() {
 
   return (
     <div className="space-y-4">
-      <div className="flex justify-end">
-        <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+      <div className="flex items-center gap-3 flex-wrap">
+        <div className="space-y-1">
+          <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran</label>
+          <select value={effectiveTA || ''} onChange={(e) => setTahunAjaranId(Number(e.target.value) || null)} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+            <option value="">Semua Tahun</option>
+            {taList?.map((ta) => (
+              <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+            ))}
+          </select>
+        </div>
+        <button onClick={handleExport} disabled={exporting} className="mt-auto flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
           {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
           Ekspor
         </button>

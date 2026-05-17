@@ -43,7 +43,9 @@ func (h *Handler) RekapPembayaran(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data, err := h.service.GetRekapPembayaran(user.SekolahID, tanggalMulai, tanggalSelesai)
+	tahunAjaranID, _ := strconv.ParseInt(r.URL.Query().Get("tahun_ajaran_id"), 10, 64)
+
+	data, err := h.service.GetRekapPembayaran(user.SekolahID, tanggalMulai, tanggalSelesai, tahunAjaranID)
 	if err != nil {
 		response.Error(w, 500, "INTERNAL_ERROR", "Gagal mengambil rekap pembayaran")
 		return
@@ -79,7 +81,9 @@ func (h *Handler) RekapPPDB(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) RekapSiswa(w http.ResponseWriter, r *http.Request) {
 	user := middleware.GetUser(r.Context())
 
-	data, err := h.service.GetRekapSiswa(user.SekolahID)
+	tahunAjaranID, _ := strconv.ParseInt(r.URL.Query().Get("tahun_ajaran_id"), 10, 64)
+
+	data, err := h.service.GetRekapSiswa(user.SekolahID, tahunAjaranID)
 	if err != nil {
 		response.Error(w, 500, "INTERNAL_ERROR", "Gagal mengambil rekap siswa")
 		return

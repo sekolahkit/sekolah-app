@@ -570,3 +570,135 @@ func TestRekening_ListAktifOnly(t *testing.T) {
 		t.Errorf("expected 1 active rekening, got %d", len(arr))
 	}
 }
+
+func TestLaporan_RekapPembayaran_TahunAjaranFilter(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2023/2024', 0)")
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies)
+
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/pembayaran", map[string]interface{}{
+		"tagihan_id": 1, "siswa_id": 1, "jumlah": 500000, "tanggal": "2024-08-10", "metode": "cash",
+	}, cookies)
+	authRequest("PUT", server.URL+"/api/v1/pembayaran/1/verify", nil, cookies)
+
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 2, "nominal": 300000, "jatuh_tempo": "2025-08-15",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/pembayaran", map[string]interface{}{
+		"tagihan_id": 2, "siswa_id": 1, "jumlah": 300000, "tanggal": "2025-08-10", "metode": "cash",
+	}, cookies)
+	authRequest("PUT", server.URL+"/api/v1/pembayaran/2/verify", nil, cookies)
+
+	resp1, result1 := authRequest("GET", server.URL+"/api/v1/laporan/pembayaran?tanggal_mulai=2024-01-01&tanggal_selesai=2026-01-01", nil, cookies)
+	if resp1.StatusCode != 200 {
+		t.Fatalf("rekap all failed: %d", resp1.StatusCode)
+	}
+	data1 := result1["data"].([]interface{})
+	totalAll := 0
+	for _, item := range data1 {
+		m := item.(map[string]interface{})
+		totalAll += int(m["total_transaksi"].(float64))
+	}
+	if totalAll != 2 {
+		t.Errorf("expected 2 transactions total (no filter), got %d", totalAll)
+	}
+
+	resp2, result2 := authRequest("GET", server.URL+"/api/v1/laporan/pembayaran?tanggal_mulai=2024-01-01&tanggal_selesai=2026-01-01&tahun_ajaran_id=1", nil, cookies)
+	if resp2.StatusCode != 200 {
+		t.Fatalf("rekap ta1 failed: %d", resp2.StatusCode)
+	}
+	data2 := result2["data"].([]interface{})
+	totalTA1 := 0
+	for _, item := range data2 {
+		m := item.(map[string]interface{})
+		totalTA1 += int(m["total_transaksi"].(float64))
+	}
+	if totalTA1 != 1 {
+		t.Errorf("expected 1 transaction for tahun_ajaran_id=1, got %d", totalTA1)
+	}
+}
+
+func TestLaporan_RekapSiswa_TahunAjaranFilter(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2023/2024', 0)")
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L", "tahun_ajaran_masuk": 1,
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "002", "nama": "Budi", "jenis_kelamin": "L", "tahun_ajaran_masuk": 2,
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "003", "nama": "Citra", "jenis_kelamin": "P", "tahun_ajaran_masuk": 2,
+	}, cookies)
+
+	respAll, resultAll := authRequest("GET", server.URL+"/api/v1/laporan/siswa", nil, cookies)
+	if respAll.StatusCode != 200 {
+		t.Fatalf("rekap siswa all failed: %d", respAll.StatusCode)
+	}
+	dataAll := resultAll["data"].(map[string]interface{})
+	if int(dataAll["total"].(float64)) != 3 {
+		t.Errorf("expected 3 total siswa (no filter), got %v", dataAll["total"])
+	}
+
+	respTA2, resultTA2 := authRequest("GET", server.URL+"/api/v1/laporan/siswa?tahun_ajaran_id=2", nil, cookies)
+	if respTA2.StatusCode != 200 {
+		t.Fatalf("rekap siswa ta2 failed: %d", respTA2.StatusCode)
+	}
+	dataTA2 := resultTA2["data"].(map[string]interface{})
+	if int(dataTA2["total"].(float64)) != 2 {
+		t.Errorf("expected 2 siswa for tahun_ajaran_id=2, got %v", dataTA2["total"])
+	}
+	if int(dataTA2["laki_laki"].(float64)) != 1 {
+		t.Errorf("expected 1 laki_laki for ta2, got %v", dataTA2["laki_laki"])
+	}
+	if int(dataTA2["perempuan"].(float64)) != 1 {
+		t.Errorf("expected 1 perempuan for ta2, got %v", dataTA2["perempuan"])
+	}
+}
+
+func TestLaporan_CrossSchoolIsolation(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "school1", "admin@s1.id", "password123")
+
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO sekolah (nama, kode) VALUES ('School 2', 'school2')")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role) VALUES (2, 'admin@s2.id', ?, 'Admin2', 'admin')", hash)
+
+	cookies1 := doLogin(t, server, "school1", "admin@s1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (2, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Siswa1", "jenis_kelamin": "L", "tahun_ajaran_masuk": 1,
+	}, cookies1)
+
+	cookies2 := doLogin(t, server, "school2", "admin@s2.id", "password123")
+
+	resp, result := authRequest("GET", server.URL+"/api/v1/laporan/siswa?tahun_ajaran_id=1", nil, cookies2)
+	if resp.StatusCode != 200 {
+		t.Fatalf("rekap siswa school2 failed: %d", resp.StatusCode)
+	}
+	data := result["data"].(map[string]interface{})
+	if int(data["total"].(float64)) != 0 {
+		t.Errorf("school2 should see 0 siswa from school1, got %v", data["total"])
+	}
+}
