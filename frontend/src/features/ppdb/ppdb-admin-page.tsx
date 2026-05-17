@@ -1,23 +1,25 @@
 import { useState } from 'react'
-import { usePendaftarList, useUpdatePendaftarStatus, useBerkasList, useVerifikasiBerkas, usePublishPengumuman } from '@/hooks/use-ppdb'
+import { usePendaftarList, useUpdatePendaftarStatus, useBerkasList, useVerifikasiBerkas, usePublishPengumuman, useRunRanking, usePublishRanking, useDaftarUlang } from '@/hooks/use-ppdb'
 import { useTahunAjaranList, useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { cn } from '@/lib/utils'
-import { Search, Eye, X, FileText, Check, Download, Loader2 } from 'lucide-react'
+import { Search, Eye, X, FileText, Check, Download, Loader2, Play, Megaphone, Trophy } from 'lucide-react'
 import { downloadExport } from '@/lib/export'
-import type { Berkas } from '@/hooks/use-ppdb'
+import type { Berkas, RankingResult, RankedPendaftaran } from '@/hooks/use-ppdb'
 
 export function PpdbAdminPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [daftarUlangFilter, setDaftarUlangFilter] = useState('')
   const [tahunAjaranFilter, setTahunAjaranFilter] = useState('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
+  const [showRankingDialog, setShowRankingDialog] = useState(false)
   const { data: taList } = useTahunAjaranList()
   const { data: taAktif } = useTahunAjaranAktif()
 
   const effectiveTA = tahunAjaranFilter || (taAktif?.id ? String(taAktif.id) : '')
-  const { data, isLoading } = usePendaftarList({ page, limit: 20, status: statusFilter || undefined, tahun_ajaran_id: effectiveTA ? Number(effectiveTA) : undefined, search: search || undefined })
+  const { data, isLoading } = usePendaftarList({ page, limit: 20, status: statusFilter || undefined, tahun_ajaran_id: effectiveTA ? Number(effectiveTA) : undefined, search: search || undefined, daftar_ulang: daftarUlangFilter || undefined })
 
   async function handleExport() {
     setExporting(true)
@@ -38,10 +40,16 @@ export function PpdbAdminPage() {
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-2">
         <h1 className="text-2xl font-bold text-foreground">PPDB - Pendaftar</h1>
-        <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
-          {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-          Ekspor
-        </button>
+        <div className="flex gap-2">
+          <button onClick={() => setShowRankingDialog(true)} disabled={!effectiveTA} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+            <Trophy className="h-4 w-4" />
+            Ranking
+          </button>
+          <button onClick={handleExport} disabled={exporting} className="flex items-center gap-2 rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+            {exporting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+            Ekspor
+          </button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
@@ -58,6 +66,12 @@ export function PpdbAdminPage() {
           <option value="cadangan">Cadangan</option>
           <option value="tidak_diterima">Tidak Diterima</option>
           <option value="daftar_ulang">Daftar Ulang</option>
+        </select>
+        <select value={daftarUlangFilter} onChange={(e) => { setDaftarUlangFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+          <option value="">Daftar Ulang: Semua</option>
+          <option value="belum">Belum</option>
+          <option value="sudah">Sudah</option>
+          <option value="batal">Batal</option>
         </select>
         <select value={effectiveTA} onChange={(e) => { setTahunAjaranFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
           <option value="">Semua Tahun</option>
@@ -81,6 +95,8 @@ export function PpdbAdminPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Nama</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">L/P</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Asal Sekolah</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Skor</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Ranking</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Status</th>
                   <th className="px-4 py-3 text-right font-medium text-muted-foreground">Aksi</th>
                 </tr>
@@ -92,6 +108,8 @@ export function PpdbAdminPage() {
                     <td className="px-4 py-3 text-foreground">{p.nama_lengkap}</td>
                     <td className="px-4 py-3 text-foreground">{p.jenis_kelamin}</td>
                     <td className="px-4 py-3 text-foreground">{p.asal_sekolah || '-'}</td>
+                    <td className="px-4 py-3 text-foreground">{p.skor > 0 ? p.skor.toFixed(1) : '-'}</td>
+                    <td className="px-4 py-3 text-foreground">{p.ranking > 0 ? p.ranking : '-'}</td>
                     <td className="px-4 py-3"><PpdbStatusBadge status={p.status} /></td>
                     <td className="px-4 py-3 text-right">
                       <button onClick={() => setSelectedId(p.id)} className="rounded p-1.5 hover:bg-muted" title="Detail">
@@ -119,6 +137,115 @@ export function PpdbAdminPage() {
       {selectedId !== null && (
         <PendaftarDetailDialog id={selectedId} onClose={() => setSelectedId(null)} />
       )}
+
+      {showRankingDialog && effectiveTA && (
+        <RankingDialog tahunAjaranId={Number(effectiveTA)} onClose={() => setShowRankingDialog(false)} />
+      )}
+    </div>
+  )
+}
+
+function RankingDialog({ tahunAjaranId, onClose }: { tahunAjaranId: number; onClose: () => void }) {
+  const runRanking = useRunRanking()
+  const publishRanking = usePublishRanking()
+  const [result, setResult] = useState<RankingResult | null>(null)
+  const [error, setError] = useState('')
+  const [published, setPublished] = useState(false)
+
+  async function handleRun(dryRun: boolean) {
+    setError('')
+    setResult(null)
+    try {
+      const res = await runRanking.mutateAsync({ tahun_ajaran_id: tahunAjaranId, dry_run: dryRun })
+      setResult(res)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal menjalankan ranking')
+    }
+  }
+
+  async function handlePublish() {
+    setError('')
+    try {
+      await publishRanking.mutateAsync({ tahun_ajaran_id: tahunAjaranId })
+      setPublished(true)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal publish pengumuman')
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-foreground/20 p-4 pt-20">
+      <div className="w-full max-w-2xl rounded-xl border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-card-foreground">Ranking PPDB</h2>
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+        </div>
+
+        <div className="mt-4 space-y-4">
+          <div className="flex gap-2">
+            <button onClick={() => handleRun(true)} disabled={runRanking.isPending} className="flex items-center gap-2 rounded-md border border-border px-4 py-2 text-sm hover:bg-muted disabled:opacity-50">
+              <Play className="h-4 w-4" />
+              {runRanking.isPending ? 'Memproses...' : 'Dry Run (Preview)'}
+            </button>
+            <button onClick={() => handleRun(false)} disabled={runRanking.isPending} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+              <Trophy className="h-4 w-4" />
+              {runRanking.isPending ? 'Memproses...' : 'Run & Simpan'}
+            </button>
+          </div>
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          {result && (
+            <div className="space-y-3">
+              <div className="rounded-lg border border-border p-3 text-sm space-y-1">
+                <p><span className="text-muted-foreground">Metode:</span> {result.metode}</p>
+                <p><span className="text-muted-foreground">Total Pendaftar:</span> {result.total_pendaftar}</p>
+                <p><span className="text-muted-foreground">Kuota:</span> {result.kuota} + {result.cadangan} cadangan</p>
+                <p><span className="text-muted-foreground">Diterima:</span> {result.diterima_count}</p>
+                <p><span className="text-muted-foreground">Cadangan:</span> {result.cadangan_count}</p>
+                <p><span className="text-muted-foreground">Tidak Diterima:</span> {result.tidak_diterima_count}</p>
+                {result.dry_run && <p className="text-accent font-medium">Preview (dry run) — data belum disimpan</p>}
+              </div>
+
+              <div className="max-h-64 overflow-y-auto rounded-lg border border-border">
+                <table className="w-full text-sm">
+                  <thead className="sticky top-0 border-b border-border bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Rank</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Nama</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Skor</th>
+                      <th className="px-3 py-2 text-left font-medium text-muted-foreground">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {result.ranked.map((r: RankedPendaftaran) => (
+                      <tr key={r.id} className="border-b border-border last:border-0">
+                        <td className="px-3 py-2 font-mono">{r.ranking}</td>
+                        <td className="px-3 py-2">{r.nama_lengkap}</td>
+                        <td className="px-3 py-2">{r.skor.toFixed(1)}</td>
+                        <td className="px-3 py-2"><PpdbStatusBadge status={r.status} /></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {!result.dry_run && !published && (
+                <button onClick={handlePublish} disabled={publishRanking.isPending} className="flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                  <Megaphone className="h-4 w-4" />
+                  {publishRanking.isPending ? 'Publishing...' : 'Publish Pengumuman'}
+                </button>
+              )}
+
+              {published && (
+                <p className="text-sm text-primary font-medium">Pengumuman berhasil dipublish!</p>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   )
 }
@@ -128,6 +255,7 @@ function PendaftarDetailDialog({ id, onClose }: { id: number; onClose: () => voi
   const updateStatus = useUpdatePendaftarStatus()
   const verifikasiBerkas = useVerifikasiBerkas()
   const publishPengumuman = usePublishPengumuman()
+  const daftarUlang = useDaftarUlang()
   const [newStatus, setNewStatus] = useState('')
   const [error, setError] = useState('')
 
@@ -156,6 +284,16 @@ function PendaftarDetailDialog({ id, onClose }: { id: number; onClose: () => voi
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
       setError(msg || 'Gagal publish pengumuman')
+    }
+  }
+
+  async function handleDaftarUlang() {
+    setError('')
+    try {
+      await daftarUlang.mutateAsync(id)
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal konfirmasi daftar ulang')
     }
   }
 
@@ -217,10 +355,15 @@ function PendaftarDetailDialog({ id, onClose }: { id: number; onClose: () => voi
           </div>
 
           <div className="space-y-2">
-            <h3 className="text-sm font-medium text-muted-foreground">Pengumuman</h3>
-            <button onClick={handlePublish} disabled={publishPengumuman.isPending} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
-              Publish Pengumuman (Diterima)
-            </button>
+            <h3 className="text-sm font-medium text-muted-foreground">Aksi</h3>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={handlePublish} disabled={publishPengumuman.isPending} className="rounded-md border border-border px-3 py-2 text-sm hover:bg-muted disabled:opacity-50">
+                Publish Pengumuman
+              </button>
+              <button onClick={handleDaftarUlang} disabled={daftarUlang.isPending} className="rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+                Konfirmasi Daftar Ulang
+              </button>
+            </div>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}
@@ -241,6 +384,9 @@ function PpdbStatusBadge({ status }: { status: string }) {
     daftar_ulang: 'bg-primary/10 text-primary',
     pending: 'bg-muted text-muted-foreground',
     ditolak: 'bg-destructive/10 text-destructive',
+    sudah: 'bg-primary/10 text-primary',
+    belum: 'bg-muted text-muted-foreground',
+    batal: 'bg-destructive/10 text-destructive',
   }
   return (
     <span className={cn('inline-block rounded-full px-2 py-0.5 text-xs font-medium', styles[status] || 'bg-muted text-muted-foreground')}>

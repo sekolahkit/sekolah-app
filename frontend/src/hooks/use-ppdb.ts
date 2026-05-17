@@ -54,6 +54,7 @@ interface PendaftarListParams {
   status?: string
   tahun_ajaran_id?: number
   search?: string
+  daftar_ulang?: string
 }
 
 export function usePendaftarList(params: PendaftarListParams = {}) {
@@ -145,5 +146,60 @@ export function usePengumuman(id: number | null) {
       return res.data.data
     },
     enabled: id !== null && id > 0,
+  })
+}
+
+export interface RankedPendaftaran {
+  id: number
+  nama_lengkap: string
+  skor: number
+  ranking: number
+  status: string
+  tanggal_lahir: string
+  latitude: number
+  longitude: number
+}
+
+export interface RankingResult {
+  ranked: RankedPendaftaran[]
+  total_pendaftar: number
+  diterima_count: number
+  cadangan_count: number
+  tidak_diterima_count: number
+  metode: string
+  kuota: number
+  cadangan: number
+  dry_run: boolean
+}
+
+export function useRunRanking() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: { tahun_ajaran_id: number; dry_run: boolean }) => {
+      const res = await api.post<ApiResponse<RankingResult>>('/ppdb/ranking/run', data)
+      return res.data.data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ppdb-pendaftar'] }),
+  })
+}
+
+export function usePublishRanking() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: { tahun_ajaran_id: number; keterangan?: string }) => {
+      const res = await api.post('/ppdb/ranking/publish', data)
+      return res.data.data
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ppdb-pendaftar'] }),
+  })
+}
+
+export function useDaftarUlang() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (id: number) => {
+      await api.post(`/ppdb/pendaftar/${id}/daftar-ulang`)
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['ppdb-pendaftar'] }),
   })
 }

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { usePengumuman } from '@/hooks/use-ppdb'
-import { Search, CheckCircle, XCircle, Clock } from 'lucide-react'
+import { Search, CheckCircle, XCircle, Clock, Trophy } from 'lucide-react'
 
 export function PpdbPengumumanPage() {
   const [inputId, setInputId] = useState('')
@@ -56,10 +56,21 @@ export function PpdbPengumumanPage() {
             </p>
 
             {data.ranking > 0 && (
-              <p className="text-sm text-muted-foreground">Ranking: {data.ranking}</p>
+              <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
+                <Trophy className="h-4 w-4" />
+                <span>Ranking: {data.ranking}</span>
+              </div>
             )}
             {data.keterangan && (
               <p className="text-sm text-muted-foreground">{data.keterangan}</p>
+            )}
+
+            {data.status === 'diterima' && (
+              <div className="mt-4 rounded-lg border border-primary/20 bg-primary/5 p-3">
+                <p className="text-sm text-primary font-medium">
+                  Silakan lakukan daftar ulang untuk mengkonfirmasi penerimaan Anda.
+                </p>
+              </div>
             )}
           </div>
         )}

@@ -323,6 +323,10 @@ func main() {
 			r.Post("/ppdb/pengumuman", ppdbHandler.PublishPengumuman)
 			r.Get("/ppdb/konfigurasi-ranking", ppdbHandler.GetKonfigurasiRanking)
 			r.Post("/ppdb/konfigurasi-ranking", ppdbHandler.UpsertKonfigurasiRanking)
+			r.Post("/ppdb/ranking/run", ppdbHandler.RunRanking)
+			r.Post("/ppdb/ranking/publish", ppdbHandler.PublishRanking)
+			r.Post("/ppdb/pendaftar/{id}/daftar-ulang", ppdbHandler.DaftarUlang)
+			r.Get("/ppdb/pendaftar/{id}/daftar-ulang/status", ppdbHandler.GetDaftarUlangStatus)
 		})
 
 		notifRepo := notifikasi.NewRepository(db)

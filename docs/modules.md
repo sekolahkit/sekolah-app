@@ -263,66 +263,80 @@ Tagihan: SPP Januari = Rp 500.000
 2. Pendaftar upload berkas (publik)
 3. Admin verifikasi berkas
 4. [Opsional] Admin input nilai ujian
-5. [Opsional] Sistem hitung ranking
-6. Admin publish pengumuman
+5. Admin jalankan ranking (POST /ppdb/ranking/run)
+   - dry_run=true untuk preview tanpa menyimpan
+   - dry_run=false untuk menyimpan hasil
+6. Admin publish pengumuman (POST /ppdb/ranking/publish)
 7. Pendaftar cek pengumuman (publik)
-8. [Opsional] Pendaftar diterima → daftar ulang + bayar
+8. Pendaftar diterima → admin konfirmasi daftar ulang
 ```
 
 ### Perankingan
 
-Modul perankingan bersifat opsional dan bisa dikonfigurasi per sekolah. Admin memilih metode ranking saat setup PPDB.
+Modul perankingan bisa dikonfigurasi per sekolah per tahun ajaran. Admin memilih metode ranking dan mengatur kuota.
 
 #### Metode Ranking
 
 | Metode | Keterangan | Cocok Untuk |
 |--------|------------|-------------|
-| Nilai Ujian | Ranking berdasarkan total/rata-rata nilai ujian | SMP, SMA, SMK |
-| Zonasi | Ranking berdasarkan jarak rumah ke sekolah | SD, SMP (Permendikbud) |
-| Kombinasi | Bobot nilai ujian + bobot zonasi | SMP, SMA |
-| Manual | Admin tentukan ranking manual | Sekolah swasta |
+| `nilai_ujian` | Ranking berdasarkan rata-rata nilai ujian | SMP, SMA, SMK |
+| `umur` | Ranking berdasarkan umur (lebih muda = skor lebih tinggi) | SD |
+| `jarak` | Ranking berdasarkan jarak rumah ke sekolah | SD, SMP (Permendikbud) |
+| `kombinasi` | Bobot nilai ujian + umur + jarak | SMP, SMA |
 
 #### Konfigurasi Bobot (Metode Kombinasi)
 
-```yaml
-ppdb:
-  ranking:
-    metode: "kombinasi"
-    bobot:
-      nilai_ujian: 60        # 60%
-      zonasi: 30             # 30%
-      prestasi: 10           # 10%
-    kuota: 200               # Jumlah yang diterima
-    cadangan: 20             # Jumlah cadangan
+```json
+{
+    "nilai_ujian": 60,
+    "umur": 20,
+    "jarak": 20
+}
 ```
 
-#### Algoritma Ranking
+Bobot diisi di field `bobot_json` pada konfigurasi ranking. Nilai menentukan proporsi kontribusi masing-masing faktor terhadap skor akhir.
+
+#### Alur Eksekusi Ranking
+```
+1. Admin POST /ppdb/ranking/run dengan { tahun_ajaran_id, dry_run: true }
+2. Sistem hitung skor untuk semua pendaftar tahun ajaran tersebut
+3. Sistem sort berdasarkan skor DESC, lalu tanggal_lahir ASC (deterministik tiebreak)
+4. Sistem assign ranking 1, 2, 3, ...
+5. Sistem assign status berdasarkan kuota:
+   - ranking <= kuota → diterima
+   - ranking <= kuota + cadangan → cadangan
+   - sisanya → tidak_diterima
+6. Jika dry_run=true → return preview, tidak ada perubahan di DB
+7. Jika dry_run=false → reset ranking sebelumnya, simpan skor/ranking/status baru
+8. Simpan log ke ppdb_ranking_log untuk audit
+```
+
+#### Idempotency
+Re-ranking menggantikan hasil sebelumnya secara atomik. Ranking sebelumnya di-reset sebelum hasil baru diterapkan. Setiap eksekusi di-log ke `ppdb_ranking_log`.
+
+#### Publish Pengumuman
+Setelah ranking dijalankan, admin bisa publish pengumuman (POST /ppdb/ranking/publish). Ini membuat record `ppdb_pengumuman` untuk setiap pendaftar yang memiliki ranking. Pengumuman dapat dilihat oleh pendaftar melalui halaman publik.
+
+### Daftar Ulang
+
+Setelah pendaftar dinyatakan diterima, admin dapat mengkonfirmasi daftar ulang:
 
 ```
-1. Hitung skor per pendaftar:
-   skor = (nilai_ujian_normalized * bobot_ujian) +
-          (skor_zonasi * bobot_zonasi) +
-          (skor_prestasi * bobot_prestasi)
-
-2. Urutkan pendaftar berdasarkan skor (descending)
-
-3. Tentukan status:
-   - Ranking 1 s/d kuota → diterima
-   - Ranking kuota+1 s/d kuota+cadangan → cadangan
-   - Sisanya → tidak_diterima
+1. Pendaftar melihat pengumuman "Diterima"
+2. Admin membuka detail pendaftar
+3. Admin klik "Konfirmasi Daftar Ulang"
+4. Status berubah menjadi "daftar_ulang"
+5. daftar_ulang_status = "sudah", daftar_ulang_at diisi
 ```
 
-#### Perhitungan Skor Zonasi
+**Status Daftar Ulang:**
+| Status | Keterangan |
+|--------|------------|
+| `belum` | Belum konfirmasi |
+| `sudah` | Sudah konfirmasi |
+| `batal` | Pembatalan |
 
-| Jarak dari Sekolah | Skor |
-|--------------------|------|
-| 0 - 1 km | 100 |
-| 1 - 3 km | 80 |
-| 3 - 5 km | 60 |
-| 5 - 10 km | 40 |
-| > 10 km | 20 |
-
-Jarak dihitung berdasarkan koordinat alamat pendaftar (opsional, bisa input manual oleh admin).
+Hanya pendaftar dengan status `diterima` yang dapat daftar ulang. Admin dapat memfilter daftar pendaftar berdasarkan status daftar ulang.
 
 ### Form Pendaftaran
 - Nama lengkap

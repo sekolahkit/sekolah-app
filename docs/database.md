@@ -399,10 +399,37 @@ CREATE TABLE ppdb_pendaftaran (
     latitude REAL,                -- koordinat untuk zonasi (opsional)
     longitude REAL,               -- koordinat untuk zonasi (opsional)
     catatan TEXT,
+    daftar_ulang_status TEXT NOT NULL DEFAULT 'belum',  -- belum, sudah, batal
+    daftar_ulang_at DATETIME,     -- waktu konfirmasi daftar ulang
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
     FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id)
+);
+```
+
+### ppdb_ranking_log
+Tabel log eksekusi ranking untuk audit.
+
+```sql
+CREATE TABLE ppdb_ranking_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
+    tahun_ajaran_id INTEGER NOT NULL,
+    metode TEXT NOT NULL,                -- metode ranking yang digunakan
+    bobot_json TEXT,                     -- snapshot bobot saat ranking dijalankan
+    kuota INTEGER NOT NULL,              -- kuota diterima
+    cadangan INTEGER NOT NULL DEFAULT 0, -- kuota cadangan
+    total_pendaftar INTEGER NOT NULL DEFAULT 0,
+    diterima_count INTEGER NOT NULL DEFAULT 0,
+    cadangan_count INTEGER NOT NULL DEFAULT 0,
+    tidak_diterima_count INTEGER NOT NULL DEFAULT 0,
+    dry_run INTEGER NOT NULL DEFAULT 0,  -- 1 = dry run, 0 = persisted
+    executed_by INTEGER NOT NULL,        -- pengguna ID yang menjalankan
+    executed_at DATETIME DEFAULT (datetime('now')),
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (tahun_ajaran_id) REFERENCES tahun_ajaran(id),
+    FOREIGN KEY (executed_by) REFERENCES pengguna(id)
 );
 ```
 
@@ -540,6 +567,13 @@ CREATE TABLE schema_migrations (
 | `cadangan` | Masuk daftar cadangan |
 | `tidak_diterima` | Tidak diterima |
 | `daftar_ulang` | Sudah daftar ulang |
+
+### Daftar Ulang Status
+| Status | Keterangan |
+|--------|------------|
+| `belum` | Belum konfirmasi daftar ulang |
+| `sudah` | Sudah konfirmasi daftar ulang |
+| `batal` | Pembatalan daftar ulang |
 
 ### Siswa Status
 | Status | Keterangan |
