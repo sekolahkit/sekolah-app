@@ -146,3 +146,105 @@ func (r *Repository) InsertPembayaranAndUpdateTagihan(tagihanID, siswaID, sekola
 
 	return tx.Commit()
 }
+
+type GatewayTransaksi struct {
+	ID              int64
+	SekolahID       int64
+	TagihanID       int64
+	Provider        string
+	OrderID         string
+	PaymentGatewayID string
+	PaymentURL      string
+	Amount          int64
+	Status          string
+	ExpiresAt       string
+	CreatedBy       int64
+	CreatedAt       string
+	UpdatedAt       string
+}
+
+func (r *Repository) FindPendingTransaction(tagihanID int64, provider string) (*GatewayTransaksi, error) {
+	row := sq.Select("id", "sekolah_id", "tagihan_id", "provider", "order_id",
+		"COALESCE(payment_gateway_id,'')", "payment_url", "amount", "status",
+		"COALESCE(expires_at,'')", "created_by", "created_at", "updated_at").
+		From("gateway_transaksi").
+		Where(sq.Eq{"tagihan_id": tagihanID, "provider": provider, "status": "pending"}).
+		RunWith(r.db).
+		QueryRow()
+
+	var t GatewayTransaksi
+	err := row.Scan(&t.ID, &t.SekolahID, &t.TagihanID, &t.Provider, &t.OrderID,
+		&t.PaymentGatewayID, &t.PaymentURL, &t.Amount, &t.Status,
+		&t.ExpiresAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *Repository) InsertGatewayTransaksi(t *GatewayTransaksi) (int64, error) {
+	result, err := sq.Insert("gateway_transaksi").
+		Columns("sekolah_id", "tagihan_id", "provider", "order_id",
+			"payment_gateway_id", "payment_url", "amount", "status", "expires_at", "created_by").
+		Values(t.SekolahID, t.TagihanID, t.Provider, t.OrderID,
+			t.PaymentGatewayID, t.PaymentURL, t.Amount, t.Status, t.ExpiresAt, t.CreatedBy).
+		RunWith(r.db).
+		Exec()
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (r *Repository) UpdateGatewayTransaksiStatus(orderID, status string) error {
+	_, err := sq.Update("gateway_transaksi").
+		Set("status", status).
+		Set("updated_at", sq.Expr("datetime('now')")).
+		Where(sq.Eq{"order_id": orderID}).
+		RunWith(r.db).
+		Exec()
+	return err
+}
+
+func (r *Repository) GetGatewayTransaksiByOrderID(orderID string) (*GatewayTransaksi, error) {
+	row := sq.Select("id", "sekolah_id", "tagihan_id", "provider", "order_id",
+		"COALESCE(payment_gateway_id,'')", "payment_url", "amount", "status",
+		"COALESCE(expires_at,'')", "created_by", "created_at", "updated_at").
+		From("gateway_transaksi").
+		Where(sq.Eq{"order_id": orderID}).
+		RunWith(r.db).
+		QueryRow()
+
+	var t GatewayTransaksi
+	err := row.Scan(&t.ID, &t.SekolahID, &t.TagihanID, &t.Provider, &t.OrderID,
+		&t.PaymentGatewayID, &t.PaymentURL, &t.Amount, &t.Status,
+		&t.ExpiresAt, &t.CreatedBy, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}
+
+func (r *Repository) FindTagihanByIDAndSekolah(tagihanID, sekolahID int64) (*TagihanInfo, error) {
+	row := sq.Select("id", "sekolah_id", "siswa_id", "nominal", "status").
+		From("tagihan").
+		Where(sq.Eq{"id": tagihanID, "sekolah_id": sekolahID}).
+		RunWith(r.db).
+		QueryRow()
+
+	var t TagihanInfo
+	err := row.Scan(&t.ID, &t.SekolahID, &t.SiswaID, &t.Nominal, &t.Status)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
+}

@@ -286,9 +286,21 @@ func main() {
 		}
 		paymentService := payment.NewService(paymentRepo, gateways...)
 		paymentHandler := payment.NewHandler(paymentService)
+		gatewayAdapter := payment.NewGatewayAdapter(paymentService)
 
 		r.Post("/payment/callback/midtrans", paymentHandler.MidtransCallback)
 		r.Post("/payment/callback/xendit", paymentHandler.XenditCallback)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Get("/payment/providers", paymentHandler.ListProviders)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin", "operator"))
+			r.Post("/tagihan/{id}/pay", paymentHandler.InitiatePayment)
+		})
 
 		ppdbRepo := ppdb.NewRepository(db)
 		ppdbService := ppdb.NewService(ppdbRepo)
@@ -402,7 +414,7 @@ func main() {
 
 		ssRepo := selfservice.NewRepository(db)
 		ssService := selfservice.NewService(ssRepo)
-		ssHandler := selfservice.NewHandler(ssService)
+		ssHandler := selfservice.NewHandlerWithGateway(ssService, gatewayAdapter)
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
@@ -432,6 +444,8 @@ func main() {
 			r.Get("/me/siswa/{id}/tagihan", ssHandler.GetTagihan)
 			r.Get("/me/siswa/{id}/pembayaran", ssHandler.GetPembayaran)
 			r.Post("/me/pembayaran", ssHandler.CreatePembayaran)
+			r.Post("/me/tagihan/{id}/pay", ssHandler.InitiateGatewayPayment)
+			r.Get("/me/payment/providers", ssHandler.GatewayProviders)
 		})
 
 		uploadService := upload.NewService("./uploads", cfg.Upload.MaxSize, cfg.Upload.AllowedTypes)

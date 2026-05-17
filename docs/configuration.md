@@ -333,6 +333,16 @@ XENDIT_SECRET_KEY=xnd_xxx
    https://your-domain.com/api/v1/payment/callback/xendit
    ```
 
+### Perilaku Gateway
+
+- Gateway hanya aktif jika environment variable terkait diisi (tidak kosong)
+- Jika tidak ada gateway yang dikonfigurasi, endpoint `/payment/providers` return array kosong
+- Jika real API credentials tidak tersedia, adapter menggunakan stub/sandbox URLs
+- `CreateTransaction` saat ini mengembalikan stub URL (sandbox mode) — tidak ada HTTP call ke API gateway eksternal
+- Transaksi disimpan di tabel `gateway_transaksi` dengan status `pending`
+- Status transaksi diupdate menjadi `paid`/`failed`/`expired` setelah callback diterima
+- Tabel `gateway_transaksi` memiliki constraint `UNIQUE(tagihan_id, provider, status)` untuk mencegah duplikasi transaksi pending
+
 ---
 
 ## Konfigurasi Google OAuth

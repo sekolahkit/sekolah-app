@@ -62,6 +62,22 @@ func setupTestDB(t *testing.T) *sql.DB {
 			created_at DATETIME DEFAULT (datetime('now')),
 			UNIQUE(provider, payment_gateway_id)
 		);
+		CREATE TABLE IF NOT EXISTS gateway_transaksi (
+			id INTEGER PRIMARY KEY AUTOINCREMENT,
+			sekolah_id INTEGER NOT NULL,
+			tagihan_id INTEGER NOT NULL,
+			provider TEXT NOT NULL,
+			order_id TEXT NOT NULL,
+			payment_gateway_id TEXT,
+			payment_url TEXT NOT NULL,
+			amount INTEGER NOT NULL,
+			status TEXT NOT NULL DEFAULT 'pending',
+			expires_at DATETIME,
+			created_by INTEGER NOT NULL,
+			created_at DATETIME DEFAULT (datetime('now')),
+			updated_at DATETIME DEFAULT (datetime('now')),
+			UNIQUE(tagihan_id, provider, status)
+		);
 	`)
 	if err != nil {
 		t.Fatal(err)

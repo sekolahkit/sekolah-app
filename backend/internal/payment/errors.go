@@ -7,10 +7,12 @@ import (
 )
 
 var (
-	ErrInvalidSignature = errors.New("invalid signature")
-	ErrInvalidToken     = errors.New("invalid callback token")
+	ErrInvalidSignature  = errors.New("invalid signature")
+	ErrInvalidToken      = errors.New("invalid callback token")
 	ErrDuplicateCallback = errors.New("duplicate callback")
-	ErrOverpay          = errors.New("payment amount exceeds tagihan")
+	ErrOverpay           = errors.New("payment amount exceeds tagihan")
+	ErrTagihanLunas      = errors.New("tagihan sudah lunas")
+	ErrProviderNotConfig = errors.New("payment provider not configured")
 )
 
 func parseAmount(s string) int64 {
