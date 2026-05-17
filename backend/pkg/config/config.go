@@ -78,6 +78,7 @@ type Secrets struct {
 	SMTPPort           string
 	SMTPUser           string
 	SMTPPassword       string
+	SMTPFrom           string
 	TelegramBotToken   string
 	MidtransServerKey  string
 	MidtransClientKey  string
@@ -113,6 +114,7 @@ func LoadSecrets() *Secrets {
 		SMTPPort:           os.Getenv("SMTP_PORT"),
 		SMTPUser:           os.Getenv("SMTP_USER"),
 		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
+		SMTPFrom:           os.Getenv("SMTP_FROM"),
 		TelegramBotToken:   os.Getenv("TELEGRAM_BOT_TOKEN"),
 		MidtransServerKey:  os.Getenv("MIDTRANS_SERVER_KEY"),
 		MidtransClientKey:  os.Getenv("MIDTRANS_CLIENT_KEY"),
