@@ -180,52 +180,36 @@ Role `siswa` dan `orangtua` hanya boleh akses data siswa yang terhubung via tabe
 #### Flow Authorization
 
 ```
-1. User dengan role siswa/orangtua request GET /siswa/:id/tagihan
+1. User dengan role siswa/orangtua request GET /me/siswa/:id/tagihan
 2. Middleware cek role → lolos (role diizinkan)
 3. Handler cek relasi:
-   SELECT 1 FROM pengguna_siswa
-   WHERE pengguna_id = ? AND siswa_id = ? AND aktif = TRUE
+   SELECT COUNT(*) FROM pengguna_siswa
+   WHERE sekolah_id = ? AND pengguna_id = ? AND siswa_id = ? AND aktif = 1
 4. Jika tidak ada relasi → 404 (bukan 403, mencegah enumeration)
 5. Jika ada → lanjut proses
 ```
 
-#### Contoh Implementasi
+#### Self-Service Endpoints
 
-```go
-func (h *SiswaHandler) GetTagihan(w http.ResponseWriter, r *http.Request) {
-    user := middleware.GetUser(r.Context())
-    siswaID := chi.URLParam(r, "id")
+Semua endpoint `/me/*` menggunakan object-level authorization:
+- `GET /me/siswa` — hanya mengembalikan siswa yang terhubung via `pengguna_siswa`
+- `GET /me/siswa/:id` — verifikasi relasi sebelum mengembalikan detail
+- `GET /me/siswa/:id/tagihan` — verifikasi relasi sebelum mengembalikan tagihan
+- `GET /me/siswa/:id/pembayaran` — verifikasi relasi sebelum mengembalikan pembayaran
+- `POST /me/pembayaran` — verifikasi bahwa tagihan milik siswa yang terhubung
 
-    // Admin/Operator: cukup cek tenant (sekolah_id)
-    if user.Role == "admin" || user.Role == "operator" {
-        tagihan, err := h.service.GetTagihanBySiswa(r.Context(), user.SekolahID, siswaID)
-        // ...
-        return
-    }
+#### Payment Self-Service
 
-    // Siswa/Orangtua: cek relasi di pengguna_siswa
-    hasAccess, err := h.service.CekRelasiPengguna(r.Context(), user.ID, siswaID)
-    if !hasAccess {
-        respond.Error(w, 404, "NOT_FOUND", "Data tidak ditemukan")
-        return
-    }
+- Siswa/orangtua hanya bisa submit pembayaran untuk tagihan yang terhubung
+- Pembayaran yang disubmit selalu berstatus `pending`
+- Siswa/orangtua **tidak bisa** verifikasi atau reject pembayaran
+- Metode yang diizinkan: `transfer`, `cash` (gateway via admin/operator)
 
-    tagihan, err := h.service.GetTagihanBySiswa(r.Context(), user.SekolahID, siswaID)
-    // ...
-}
-```
+#### Guru Access
 
-#### Aturan Relasi
-
-| Hubungan | Artinya |
-|----------|---------|
-| `diri_sendiri` | User role `siswa` terhubung ke record siswa miliknya |
-| `ayah` | User role `orangtua` adalah ayah dari siswa |
-| `ibu` | User role `orangtua` adalah ibu dari siswa |
-| `wali` | User role `orangtua` adalah wali dari siswa |
-| `lainnya` | Relasi lain yang diizinkan admin |
-
-Satu orangtua bisa terhubung ke banyak siswa (misal kakak-adik). Satu siswa bisa punya banyak pengguna terhubung (ayah + ibu).
+- Guru hanya bisa melihat kelas di mana mereka ditugaskan sebagai wali kelas (`wali_kelas_id`)
+- Guru hanya bisa melihat siswa di kelas yang mereka ampu
+- Guru **tidak bisa** mengakses data pembayaran atau tagihan siswa
 
 ---
 

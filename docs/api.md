@@ -167,6 +167,48 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 
 Setelah password diubah, semua refresh token user di-revoke dan user harus login ulang.
 
+### Dashboard
+
+| Method | Endpoint | Keterangan | Role |
+|--------|----------|------------|------|
+| GET | `/dashboard/admin` | Dashboard admin | Admin |
+| GET | `/dashboard/operator` | Dashboard operator | Admin, Operator |
+| GET | `/dashboard/guru` | Dashboard guru (kelas wali, jumlah siswa) | Guru |
+| GET | `/dashboard/siswa` | Dashboard siswa (tagihan, pembayaran) | Siswa |
+| GET | `/dashboard/orangtua` | Dashboard orangtua (anak, tagihan, pembayaran) | Orangtua |
+
+### Self-Service (Siswa & Orangtua)
+
+| Method | Endpoint | Keterangan | Role |
+|--------|----------|------------|------|
+| GET | `/me/siswa` | List siswa yang terhubung | Siswa, Orangtua |
+| GET | `/me/siswa/:id` | Detail siswa (harus terhubung via pengguna_siswa) | Siswa, Orangtua |
+| GET | `/me/siswa/:id/tagihan` | Tagihan siswa yang terhubung | Siswa, Orangtua |
+| GET | `/me/siswa/:id/pembayaran` | Riwayat pembayaran siswa yang terhubung | Siswa, Orangtua |
+| POST | `/me/pembayaran` | Submit pembayaran manual (hanya tagihan terhubung) | Siswa, Orangtua |
+
+#### Submit Pembayaran (POST /me/pembayaran)
+
+```json
+{
+    "tagihan_id": 1,
+    "jumlah": 500000,
+    "tanggal": "2024-01-15",
+    "metode": "transfer",
+    "rekening_sekolah_id": 1,
+    "catatan": "Transfer via BCA"
+}
+```
+
+Pembayaran yang disubmit berstatus `pending` dan harus diverifikasi oleh admin/operator.
+
+### Guru
+
+| Method | Endpoint | Keterangan | Role |
+|--------|----------|------------|------|
+| GET | `/guru/kelas` | List kelas yang diampu (wali kelas) | Guru |
+| GET | `/guru/kelas/:id/siswa` | List siswa di kelas yang diampu | Guru |
+
 ### Siswa
 
 | Method | Endpoint | Keterangan | Role |
