@@ -33,11 +33,11 @@ Sebagian besar endpoint membutuhkan JWT token. Token dikirim via httpOnly cookie
 
 ### Public Endpoints (Tanpa Auth)
 - `POST /api/v1/auth/login`
-- `POST /api/v1/auth/register`
-- `POST /api/v1/auth/google`
 - `GET /api/v1/ppdb/daftar` (halaman publik PPDB)
 - `POST /api/v1/ppdb/daftar` (submit pendaftaran)
 - `GET /api/v1/ppdb/pengumuman/:id`
+
+**Catatan:** Public registration (`POST /auth/register`) tidak diaktifkan. User dibuat oleh admin melalui endpoint `/users`. Google OAuth (`POST /auth/google`) belum diimplementasi (future work).
 
 ## Format Response
 
@@ -90,8 +90,6 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
 | POST | `/auth/login` | Login email/password | Public |
-| POST | `/auth/register` | Register user baru | Public |
-| POST | `/auth/google` | Login dengan Google | Public |
 | POST | `/auth/logout` | Logout, revoke refresh token | Auth |
 | POST | `/auth/refresh` | Refresh access token (baca refresh_token dari cookie) | Public (cookie required) |
 | POST | `/auth/revoke-all/:user_id` | Revoke semua session user | Admin |
@@ -113,7 +111,61 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | GET | `/users/:id` | Detail user | Admin |
 | POST | `/users` | Buat user baru | Admin |
 | PUT | `/users/:id` | Update user | Admin |
-| DELETE | `/users/:id` | Hapus user | Admin |
+| DELETE | `/users/:id` | Nonaktifkan user (soft delete) | Admin |
+| POST | `/users/:id/reset-password` | Reset password user | Admin |
+
+#### Query Parameters (GET /users)
+
+| Parameter | Keterangan | Default |
+|-----------|------------|---------|
+| `page` | Halaman ke- | 1 |
+| `limit` | Jumlah per halaman | 20 |
+| `search` | Cari nama/email | - |
+| `role` | Filter role (admin/operator/guru/siswa/orangtua) | - |
+| `aktif` | Filter status (true/false) | - |
+
+#### Create User (POST /users)
+
+```json
+{
+    "nama": "Operator Satu",
+    "email": "operator@sekolah.id",
+    "password": "minimal8karakter",
+    "role": "operator",
+    "no_hp": "08123456789"
+}
+```
+
+#### Update User (PUT /users/:id)
+
+```json
+{
+    "nama": "Operator Updated",
+    "email": "operator@sekolah.id",
+    "role": "operator",
+    "no_hp": "08123456789",
+    "aktif": true
+}
+```
+
+#### Reset Password (POST /users/:id/reset-password)
+
+```json
+{
+    "password": "newpassword123"
+}
+```
+
+#### Change Password (PUT /auth/password)
+
+```json
+{
+    "current_password": "oldpassword",
+    "new_password": "newpassword123"
+}
+```
+
+Setelah password diubah, semua refresh token user di-revoke dan user harus login ulang.
 
 ### Siswa
 
