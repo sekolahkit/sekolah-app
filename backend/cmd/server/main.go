@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Sekolahkit/sekolah-app/internal/auth"
+	"github.com/Sekolahkit/sekolah-app/internal/backup"
 	"github.com/Sekolahkit/sekolah-app/internal/jurusan"
 	"github.com/Sekolahkit/sekolah-app/internal/kelas"
 	"github.com/Sekolahkit/sekolah-app/internal/laporan"
@@ -170,6 +171,21 @@ func main() {
 
 			tahun_ajaran.RegisterRoutes(r, tahunAjaranHandler)
 			jurusan.RegisterRoutes(r, jurusanHandler)
+
+			backupService := backup.NewService(backup.Config{
+				BackupPath: cfg.Backup.Path,
+				DBPath:     cfg.Database.Path,
+				UploadPath: "./uploads",
+				Retention:  cfg.Backup.Retention,
+			})
+			backupHandler := backup.NewHandler(backupService)
+
+			r.Route("/backup", func(r chi.Router) {
+				r.Get("/", backupHandler.List)
+				r.Post("/", backupHandler.Create)
+				r.Get("/{id}/download", backupHandler.Download)
+				r.Post("/restore/{id}", backupHandler.Restore)
+			})
 		})
 
 		r.Group(func(r chi.Router) {

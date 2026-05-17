@@ -50,10 +50,8 @@ upload:
 
 # Backup
 backup:
-  enabled: true                       # Aktifkan auto backup
-  schedule: "0 2 * * *"              # Cron schedule (jam 2 pagi)
-  retention: 7                        # Simpan backup (hari)
-  path: "./backups"                   # Path backup
+  retention: 7                        # Simpan backup terakhir (hari)
+  path: "./backups"                   # Direktori penyimpanan backup
 
 # Rate limiting
 rate_limit:

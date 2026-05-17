@@ -2,9 +2,11 @@ import { useState } from 'react'
 import { useTheme } from '@/hooks/use-theme-hook'
 import { useTahunAjaranList, useCreateTahunAjaran, useUpdateTahunAjaran, useSetTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { useJurusanList, useCreateJurusan, useUpdateJurusan, useDeleteJurusan } from '@/hooks/use-jurusan'
+import { useBackupList, useCreateBackup, useRestoreBackup } from '@/hooks/use-backup'
 import { cn } from '@/lib/utils'
+import api from '@/lib/api'
 import type { ThemeMode } from '@/lib/theme'
-import { Sun, Moon, Monitor, Plus, X, Check, Star, Trash2 } from 'lucide-react'
+import { Sun, Moon, Monitor, Plus, X, Check, Star, Trash2, Download, RefreshCw, HardDrive, AlertTriangle } from 'lucide-react'
 import type { TahunAjaran } from '@/hooks/use-tahun-ajaran'
 import type { Jurusan } from '@/hooks/use-jurusan'
 
@@ -46,6 +48,7 @@ export function PengaturanPage() {
 
         <TahunAjaranSection />
         <JurusanSection />
+        <BackupSection />
       </div>
     </div>
   )
@@ -288,6 +291,172 @@ function JurusanSection() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function BackupSection() {
+  const { data: backups, isLoading } = useBackupList()
+  const createMut = useCreateBackup()
+  const restoreMut = useRestoreBackup()
+  const [showRestoreModal, setShowRestoreModal] = useState(false)
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null)
+  const [confirmText, setConfirmText] = useState('')
+  const [error, setError] = useState('')
+
+  async function handleCreate() {
+    setError('')
+    try {
+      await createMut.mutateAsync()
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal membuat backup')
+    }
+  }
+
+  function openRestore(backupId: string) {
+    setRestoreTarget(backupId)
+    setConfirmText('')
+    setError('')
+    setShowRestoreModal(true)
+  }
+
+  async function handleRestore() {
+    if (!restoreTarget) return
+    setError('')
+    try {
+      await restoreMut.mutateAsync({ backupId: restoreTarget, confirm: confirmText })
+      setShowRestoreModal(false)
+      alert('Restore berhasil! Silakan restart aplikasi.')
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: { message?: string } } } })?.response?.data?.error?.message
+      setError(msg || 'Gagal restore')
+    }
+  }
+
+  async function handleDownload(backupId: string, filename: string) {
+    try {
+      const res = await api.get(`/backup/${backupId}/download`, { responseType: 'blob' })
+      const url = window.URL.createObjectURL(new Blob([res.data]))
+      const link = document.createElement('a')
+      link.href = url
+      link.setAttribute('download', filename)
+      document.body.appendChild(link)
+      link.click()
+      link.remove()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      alert('Gagal mengunduh backup')
+    }
+  }
+
+  function formatSize(bytes: number): string {
+    if (bytes < 1024) return `${bytes} B`
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+  }
+
+  function formatDate(dateStr: string): string {
+    try {
+      return new Date(dateStr).toLocaleString('id-ID', {
+        day: '2-digit', month: 'short', year: 'numeric',
+        hour: '2-digit', minute: '2-digit',
+      })
+    } catch {
+      return dateStr
+    }
+  }
+
+  return (
+    <div className="rounded-lg border border-border bg-card p-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="font-medium text-card-foreground">Backup & Restore</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Kelola backup database dan file upload.</p>
+        </div>
+        <button onClick={handleCreate} disabled={createMut.isPending} className="flex items-center gap-1 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50">
+          {createMut.isPending ? <RefreshCw className="h-4 w-4 animate-spin" /> : <HardDrive className="h-4 w-4" />}
+          {createMut.isPending ? 'Membuat...' : 'Buat Backup'}
+        </button>
+      </div>
+
+      {error && <p className="mt-3 text-sm text-destructive">{error}</p>}
+
+      {isLoading ? (
+        <p className="mt-4 text-sm text-muted-foreground">Memuat...</p>
+      ) : !backups?.length ? (
+        <p className="mt-4 text-sm text-muted-foreground">Belum ada backup.</p>
+      ) : (
+        <div className="mt-4 space-y-2">
+          {backups.map((b) => (
+            <div key={b.id} className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2">
+                  <HardDrive className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm font-medium text-foreground">{b.filename}</span>
+                </div>
+                <div className="mt-1 flex items-center gap-3 text-xs text-muted-foreground">
+                  <span>{formatSize(b.size)}</span>
+                  <span>{formatDate(b.created_at)}</span>
+                </div>
+              </div>
+              <div className="flex items-center gap-1">
+                <button onClick={() => handleDownload(b.id, b.filename)} className="rounded p-1.5 hover:bg-muted" title="Download">
+                  <Download className="h-4 w-4 text-muted-foreground" />
+                </button>
+                <button onClick={() => openRestore(b.id)} className="rounded p-1.5 hover:bg-muted" title="Restore">
+                  <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {showRestoreModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+          <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold text-card-foreground">Konfirmasi Restore</h3>
+              <button onClick={() => setShowRestoreModal(false)} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+            </div>
+
+            <div className="mt-4 rounded-lg border border-destructive/30 bg-destructive/5 p-3">
+              <div className="flex items-start gap-2">
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-destructive" />
+                <div className="text-sm text-destructive">
+                  <p className="font-medium">Peringatan: Restore adalah operasi destruktif!</p>
+                  <p className="mt-1 text-xs">Database dan file upload saat ini akan diganti dengan data dari backup ini. Backup otomatis akan dibuat sebelum restore.</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="mt-4 space-y-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-muted-foreground">Ketik <span className="font-mono font-bold">RESTORE</span> untuk konfirmasi</label>
+                <input
+                  type="text"
+                  value={confirmText}
+                  onChange={(e) => setConfirmText(e.target.value)}
+                  placeholder="RESTORE"
+                  className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                />
+              </div>
+              {error && <p className="text-sm text-destructive">{error}</p>}
+              <div className="flex justify-end gap-2 pt-2">
+                <button type="button" onClick={() => setShowRestoreModal(false)} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
+                <button
+                  onClick={handleRestore}
+                  disabled={confirmText !== 'RESTORE' || restoreMut.isPending}
+                  className="rounded-md bg-destructive px-4 py-2 text-sm font-medium text-destructive-foreground hover:opacity-90 disabled:opacity-50"
+                >
+                  {restoreMut.isPending ? 'Merestore...' : 'Restore Sekarang'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

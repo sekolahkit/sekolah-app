@@ -267,8 +267,17 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 |--------|----------|------------|------|
 | GET | `/backup` | List backup | Admin |
 | POST | `/backup` | Buat backup manual | Admin |
-| GET | `/backup/:id/download` | Download backup | Admin |
-| POST | `/backup/restore/:id` | Restore backup | Admin |
+| GET | `/backup/:id/download` | Download backup (.tar.gz) | Admin |
+| POST | `/backup/restore/:id` | Restore dari backup | Admin |
+
+> **Restore:** Memerlukan konfirmasi eksplisit. Request body:
+> ```json
+> {
+>   "confirm": "RESTORE",
+>   "backup_id": ":id"
+> }
+> ```
+> Backup otomatis dibuat sebelum restore dimulai. Database dan file upload akan diganti. Pastikan aplikasi dalam maintenance mode sebelum restore.
 
 ### Setup
 
