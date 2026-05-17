@@ -8,16 +8,20 @@ import (
 )
 
 type WorkerConfig struct {
-	Interval   time.Duration
-	BatchSize  int
-	Throttle   time.Duration
+	Interval    time.Duration
+	BatchSize   int
+	Throttle    time.Duration
+	StaleAfter  time.Duration
+	RetryDelay  time.Duration
 }
 
 func DefaultWorkerConfig() WorkerConfig {
 	return WorkerConfig{
-		Interval:  30 * time.Second,
-		BatchSize: 10,
-		Throttle:  500 * time.Millisecond,
+		Interval:   30 * time.Second,
+		BatchSize:  10,
+		Throttle:   500 * time.Millisecond,
+		StaleAfter: 5 * time.Minute,
+		RetryDelay: 30 * time.Second,
 	}
 }
 
@@ -41,6 +45,7 @@ func (w *Worker) Start(ctx context.Context) {
 	w.logger.Info("worker started",
 		"interval", w.cfg.Interval,
 		"batch_size", w.cfg.BatchSize,
+		"stale_after", w.cfg.StaleAfter,
 		"providers", w.registry.Types(),
 	)
 
@@ -53,15 +58,27 @@ func (w *Worker) Start(ctx context.Context) {
 			w.logger.Info("worker stopped")
 			return
 		case <-ticker.C:
+			w.releaseStale()
 			w.processBatch(ctx)
 		}
 	}
 }
 
-func (w *Worker) processBatch(ctx context.Context) {
-	items, err := w.repo.GetAllPending(w.cfg.BatchSize)
+func (w *Worker) releaseStale() {
+	released, err := w.repo.ReleaseStale(w.cfg.StaleAfter)
 	if err != nil {
-		w.logger.Error("gagal mengambil pending items", "error", err)
+		w.logger.Error("gagal release stale items", "error", err)
+		return
+	}
+	if released > 0 {
+		w.logger.Warn("released stale processing items", "count", released)
+	}
+}
+
+func (w *Worker) processBatch(ctx context.Context) {
+	items, err := w.repo.ClaimPending(w.cfg.BatchSize)
+	if err != nil {
+		w.logger.Error("gagal claim pending items", "error", err)
 		return
 	}
 
@@ -69,11 +86,15 @@ func (w *Worker) processBatch(ctx context.Context) {
 		return
 	}
 
-	w.logger.Info("processing batch", "count", len(items))
+	w.logger.Info("claimed batch", "count", len(items))
 
 	for i := range items {
 		select {
 		case <-ctx.Done():
+			w.logger.Warn("context cancelled, releasing remaining items")
+			for j := i; j < len(items); j++ {
+				w.repo.UpdateStatus(items[j].ID, "pending", "worker shutdown", items[j].RetryCount)
+			}
 			return
 		default:
 		}

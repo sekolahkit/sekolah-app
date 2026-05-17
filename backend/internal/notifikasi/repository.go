@@ -2,6 +2,7 @@ package notifikasi
 
 import (
 	"database/sql"
+	"time"
 
 	sq "github.com/Masterminds/squirrel"
 )
@@ -30,9 +31,10 @@ type Notifikasi struct {
 }
 
 type QueueStats struct {
-	Pending int `json:"pending"`
-	Sent    int `json:"sent"`
-	Failed  int `json:"failed"`
+	Pending    int `json:"pending"`
+	Processing int `json:"processing"`
+	Sent       int `json:"sent"`
+	Failed     int `json:"failed"`
 }
 
 type ListParams struct {
@@ -110,6 +112,10 @@ func (r *Repository) UpdateStatus(id int64, status, lastError string, retryCount
 		builder = builder.Set("sent_at", sq.Expr("CURRENT_TIMESTAMP"))
 	}
 
+	if status != "processing" {
+		builder = builder.Set("claimed_at", nil)
+	}
+
 	_, err := builder.RunWith(r.db).Exec()
 	return err
 }
@@ -135,9 +141,65 @@ func (r *Repository) ResetForRetry(id int64) error {
 	_, err := sq.Update("notifikasi_antrian").
 		Set("status", "pending").
 		Set("last_error", "").
+		Set("claimed_at", nil).
 		Where(sq.Eq{"id": id}).
 		RunWith(r.db).Exec()
 	return err
+}
+
+func (r *Repository) ClaimPending(limit int) ([]Notifikasi, error) {
+	claimToken := time.Now().UTC().Format("2006-01-02 15:04:05.000000000")
+
+	res, err := sq.Update("notifikasi_antrian").
+		Set("status", "processing").
+		Set("claimed_at", claimToken).
+		Where("id IN (SELECT id FROM notifikasi_antrian WHERE status = 'pending' AND retry_count < max_retries AND (scheduled_at IS NULL OR scheduled_at <= datetime('now')) ORDER BY created_at ASC LIMIT ?)", limit).
+		RunWith(r.db).Exec()
+	if err != nil {
+		return nil, err
+	}
+
+	claimed, _ := res.RowsAffected()
+	if claimed == 0 {
+		return nil, nil
+	}
+
+	rows, err := sq.Select("id", "sekolah_id", "tipe", "penerima", "pesan", "status",
+		"retry_count", "max_retries", "COALESCE(last_error,'')",
+		"COALESCE(scheduled_at,'')", "COALESCE(sent_at,'')", "created_at").
+		From("notifikasi_antrian").
+		Where(sq.Eq{"status": "processing", "claimed_at": claimToken}).
+		RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Notifikasi
+	for rows.Next() {
+		var n Notifikasi
+		err := rows.Scan(&n.ID, &n.SekolahID, &n.Tipe, &n.Penerima, &n.Pesan, &n.Status,
+			&n.RetryCount, &n.MaxRetries, &n.LastError, &n.ScheduledAt, &n.SentAt, &n.CreatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, n)
+	}
+	return list, nil
+}
+
+func (r *Repository) ReleaseStale(olderThan time.Duration) (int64, error) {
+	cutoff := time.Now().Add(-olderThan).UTC().Format("2006-01-02 15:04:05")
+	res, err := sq.Update("notifikasi_antrian").
+		Set("status", "pending").
+		Set("claimed_at", nil).
+		Where(sq.Eq{"status": "processing"}).
+		Where("claimed_at < ?", cutoff).
+		RunWith(r.db).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
 }
 
 func (r *Repository) GetQueueStats(sekolahID int64) (*QueueStats, error) {
@@ -161,6 +223,8 @@ func (r *Repository) GetQueueStats(sekolahID int64) (*QueueStats, error) {
 		switch status {
 		case "pending":
 			stats.Pending = count
+		case "processing":
+			stats.Processing = count
 		case "sent":
 			stats.Sent = count
 		case "failed":
