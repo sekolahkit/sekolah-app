@@ -341,7 +341,7 @@ CREATE INDEX idx_kelas_siswa_sekolah_id ON kelas_siswa(sekolah_id);
 CREATE INDEX idx_kelas_siswa_siswa_id ON kelas_siswa(siswa_id);
 CREATE INDEX idx_kelas_siswa_kelas_id ON kelas_siswa(kelas_id);
 CREATE INDEX idx_kelas_siswa_tahun_ajaran_id ON kelas_siswa(tahun_ajaran_id);
-CREATE UNIQUE INDEX idx_kelas_siswa_unique ON kelas_siswa(sekolah_id, siswa_id, kelas_id, tahun_ajaran_id);
+CREATE UNIQUE INDEX idx_kelas_siswa_unique ON kelas_siswa(siswa_id, kelas_id, tahun_ajaran_id);
 
 CREATE INDEX idx_pengguna_siswa_sekolah_id ON pengguna_siswa(sekolah_id);
 CREATE INDEX idx_pengguna_siswa_pengguna_id ON pengguna_siswa(pengguna_id);
