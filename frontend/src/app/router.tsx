@@ -12,6 +12,8 @@ import { PpdbPengumumanPage } from '@/features/ppdb/ppdb-pengumuman-page'
 import { PpdbAdminPage } from '@/features/ppdb/ppdb-admin-page'
 import { LaporanPage } from '@/features/laporan/laporan-page'
 import { NotifikasiPage } from '@/features/notifikasi/notifikasi-page'
+import { UserManagementPage } from '@/features/pengguna/pengguna-page'
+import { ChangePasswordPage } from '@/features/pengguna/change-password-page'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -50,6 +52,8 @@ export function AppRouter() {
           <Route path="ppdb" element={<PpdbAdminPage />} />
           <Route path="laporan" element={<LaporanPage />} />
           <Route path="notifikasi" element={<NotifikasiPage />} />
+          <Route path="pengguna" element={<UserManagementPage />} />
+          <Route path="ubah-password" element={<ChangePasswordPage />} />
           <Route path="pengaturan" element={<PengaturanPage />} />
         </Route>
       </Routes>

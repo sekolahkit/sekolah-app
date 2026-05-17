@@ -6,6 +6,20 @@ export interface User {
   role: 'admin' | 'operator' | 'guru' | 'siswa' | 'orangtua'
 }
 
+export interface UserDetail {
+  id: number
+  sekolah_id: number
+  email: string
+  nama: string
+  role: 'admin' | 'operator' | 'guru' | 'siswa' | 'orangtua'
+  google_id?: string
+  foto?: string
+  no_hp?: string
+  aktif: boolean
+  created_at: string
+  updated_at: string
+}
+
 export interface Sekolah {
   id: number
   nama: string

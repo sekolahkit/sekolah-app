@@ -24,6 +24,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
 	"github.com/Sekolahkit/sekolah-app/internal/upload"
+	"github.com/Sekolahkit/sekolah-app/internal/user"
 	mw "github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -87,12 +88,31 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 			r.Use(mw.Auth(testJWTSecret))
 			r.Post("/auth/logout", authHandler.Logout)
 			r.Get("/auth/me", authHandler.Me)
+			r.Put("/auth/password", authHandler.ChangePassword)
 		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(testJWTSecret))
 			r.Use(mw.RequireRole("admin"))
 			r.Post("/auth/revoke-all/{user_id}", authHandler.RevokeAll)
+		})
+
+		userRepo := user.NewRepository(db)
+		userService := user.NewService(userRepo)
+		userHandler := user.NewHandler(userService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Use(mw.RequireRole("admin"))
+
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", userHandler.List)
+				r.Post("/", userHandler.Create)
+				r.Get("/{id}", userHandler.GetByID)
+				r.Put("/{id}", userHandler.Update)
+				r.Delete("/{id}", userHandler.Deactivate)
+				r.Post("/{id}/reset-password", userHandler.ResetPassword)
+			})
 		})
 
 		sekolahRepo := sekolah.NewRepository(db)
@@ -1215,5 +1235,184 @@ func TestBackup_Download_NotFound(t *testing.T) {
 	resp, _ := authRequest("GET", server.URL+"/api/v1/backup/nonexistent/download", nil, cookies)
 	if resp.StatusCode != 404 {
 		t.Errorf("expected 404 for nonexistent backup, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_CRUD(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, result := authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "Operator Satu", "email": "op1@test1.id", "password": "password123", "role": "operator",
+	}, cookies)
+	if resp.StatusCode != 201 {
+		t.Fatalf("create user: expected 201, got %d: %v", resp.StatusCode, result)
+	}
+	userData := result["data"].(map[string]interface{})
+	userID := fmt.Sprintf("%.0f", userData["id"].(float64))
+
+	resp, result = authRequest("GET", server.URL+"/api/v1/users", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("list users: expected 200, got %d", resp.StatusCode)
+	}
+	meta := result["meta"].(map[string]interface{})
+	if int(meta["total"].(float64)) < 2 {
+		t.Errorf("expected at least 2 users, got %v", meta["total"])
+	}
+
+	resp, result = authRequest("GET", server.URL+"/api/v1/users/"+userID, nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("get user: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, result = authRequest("PUT", server.URL+"/api/v1/users/"+userID, map[string]interface{}{
+		"nama": "Operator Updated", "email": "op1@test1.id", "role": "operator", "aktif": true,
+	}, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("update user: expected 200, got %d: %v", resp.StatusCode, result)
+	}
+	if result["data"].(map[string]interface{})["nama"] != "Operator Updated" {
+		t.Errorf("expected updated name")
+	}
+
+	resp, _ = authRequest("DELETE", server.URL+"/api/v1/users/"+userID, nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("deactivate user: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_EmailUniqueness(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "User A", "email": "dup@test1.id", "password": "password123", "role": "guru",
+	}, cookies)
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "User B", "email": "dup@test1.id", "password": "password123", "role": "guru",
+	}, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("duplicate email: expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_InvalidRole(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "Bad Role", "email": "bad@test1.id", "password": "password123", "role": "superadmin",
+	}, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("invalid role: expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_LastAdminProtection(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("DELETE", server.URL+"/api/v1/users/1", nil, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("last admin deactivate: expected 400, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("PUT", server.URL+"/api/v1/users/1", map[string]interface{}{
+		"nama": "Admin", "email": "admin@test1.id", "role": "operator", "aktif": true,
+	}, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("last admin role change: expected 400, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_CrossSchoolRejected(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies1 := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "User School1", "email": "u1@test1.id", "password": "password123", "role": "guru",
+	}, cookies1)
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/users/1", nil, nil)
+	if resp.StatusCode != 401 {
+		t.Errorf("unauthenticated access: expected 401, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_OperatorCannotAccess(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (1, 'op@test1.id', ?, 'Operator', 'operator', 1)", hash)
+
+	opCookies := doLogin(t, server, "test1", "op@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/users", nil, opCookies)
+	if resp.StatusCode != 403 {
+		t.Errorf("operator access users: expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestUserManagement_ResetPassword(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	authRequest("POST", server.URL+"/api/v1/users", map[string]interface{}{
+		"nama": "Reset User", "email": "reset@test1.id", "password": "oldpass123", "role": "operator",
+	}, cookies)
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/users/2/reset-password", map[string]interface{}{
+		"password": "newpass123",
+	}, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("reset password: expected 200, got %d", resp.StatusCode)
+	}
+
+	newCookies := doLogin(t, server, "test1", "reset@test1.id", "newpass123")
+	if len(newCookies) == 0 {
+		t.Error("login with new password failed")
+	}
+}
+
+func TestChangePassword(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("PUT", server.URL+"/api/v1/auth/password", map[string]interface{}{
+		"current_password": "wrongpass", "new_password": "newpass123",
+	}, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("wrong current password: expected 400, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("PUT", server.URL+"/api/v1/auth/password", map[string]interface{}{
+		"current_password": "password123", "new_password": "newpass123",
+	}, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("change password: expected 200, got %d", resp.StatusCode)
+	}
+
+	newCookies := doLogin(t, server, "test1", "admin@test1.id", "newpass123")
+	if len(newCookies) == 0 {
+		t.Error("login with new password failed")
+	}
+
+	body := fmt.Sprintf(`{"kode_sekolah":"test1","email":"admin@test1.id","password":"password123"}`)
+	resp2, err := http.Post(server.URL+"/api/v1/auth/login", "application/json", bytes.NewBufferString(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	resp2.Body.Close()
+	if resp2.StatusCode != 401 {
+		t.Errorf("old password should fail: expected 401, got %d", resp2.StatusCode)
 	}
 }

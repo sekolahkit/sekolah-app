@@ -134,6 +134,15 @@ func (r *Repository) FindUserByID(id int64) (*User, error) {
 	return user, nil
 }
 
+func (r *Repository) UpdatePassword(userID int64, hashedPassword string) error {
+	_, err := sq.Update("pengguna").
+		Set("password", hashedPassword).
+		Set("updated_at", time.Now()).
+		Where(sq.Eq{"id": userID}).
+		RunWith(r.db).Exec()
+	return err
+}
+
 func HashToken(token string) string {
 	h := sha256.Sum256([]byte(token))
 	return hex.EncodeToString(h[:])

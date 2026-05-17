@@ -100,6 +100,38 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 	response.JSON(w, 200, result)
 }
 
+func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	if user == nil {
+		response.Error(w, 401, "UNAUTHORIZED", "Belum login")
+		return
+	}
+
+	var req ChangePasswordRequest
+	if err := validator.DecodeJSON(r, &req); err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "Request body tidak valid")
+		return
+	}
+
+	errs := validator.Collect(
+		validator.Required("current_password", req.CurrentPassword),
+		validator.Required("new_password", req.NewPassword),
+		validator.MinLength("new_password", req.NewPassword, 8),
+	)
+	if len(errs) > 0 {
+		response.ErrorWithDetails(w, 400, "VALIDATION_ERROR", "Data tidak valid", errs)
+		return
+	}
+
+	if err := h.service.ChangePassword(user.UserID, req); err != nil {
+		response.Error(w, 400, "CHANGE_PASSWORD_FAILED", err.Error())
+		return
+	}
+
+	clearAuthCookies(w)
+	response.JSON(w, 200, map[string]string{"message": "Password berhasil diubah, silakan login kembali"})
+}
+
 func (h *Handler) RevokeAll(w http.ResponseWriter, r *http.Request) {
 	userIDStr := chi.URLParam(r, "user_id")
 	userID, err := strconv.ParseInt(userIDStr, 10, 64)

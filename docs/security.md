@@ -70,6 +70,48 @@ Refresh token rotation memastikan token yang bocor hanya bisa dipakai sekali. Ji
 - Harus mengandung huruf dan angka
 - Disimpan dengan bcrypt (salt otomatis)
 
+### Password Change
+
+User yang sudah login bisa mengubah password via `PUT /auth/password`:
+
+1. User kirim `current_password` + `new_password`
+2. Backend verifikasi `current_password` terhadap hash di DB
+3. Jika cocok → hash `new_password` dengan bcrypt, simpan ke DB
+4. Revoke semua refresh token user (force re-login di semua device)
+5. Clear auth cookies di response
+6. User harus login ulang dengan password baru
+
+### User Management
+
+User dibuat oleh admin melalui endpoint `/users` (admin-created users only).
+
+**Public registration (`POST /auth/register`) tidak diaktifkan.** Keputusan ini diambil untuk keamanan:
+- Mencegah pendaftaran user tanpa otorisasi
+- Setiap user harus diverifikasi oleh admin sekolah
+- Menghindari spam account dan abuse
+
+**Google OAuth (`POST /auth/google`) belum diimplementasi** — dijadwalkan sebagai future work. Jika diimplementasi nanti, harus:
+- Config-gated (bisa dimatikan per sekolah)
+- Tenant-safe (user Google hanya bisa login ke sekolah yang sudah terdaftar)
+- Tidak membuat user baru secara otomatis tanpa approval admin
+
+### User Management RBAC
+
+| Aksi | Admin | Operator | Guru/Siswa/Orangtua |
+|------|-------|----------|---------------------|
+| List users | Ya (sekolah sendiri) | Tidak | Tidak |
+| Create user | Ya | Tidak | Tidak |
+| Update user | Ya | Tidak | Tidak |
+| Deactivate user | Ya (kecuali admin terakhir) | Tidak | Tidak |
+| Reset password user | Ya | Tidak | Tidak |
+| Ubah password sendiri | Ya | Ya | Ya |
+
+Proteksi tambahan:
+- Admin terakhir yang aktif di sekolah tidak bisa dinonaktifkan atau diubah role-nya
+- Email harus unik per sekolah (constraint `UNIQUE(sekolah_id, email)`)
+- User hanya bisa dikelola dalam scope sekolah yang sama (tenant isolation)
+- Password tidak pernah dikembalikan di response API
+
 ### Token Refresh
 
 Lihat "Refresh Flow" di atas. Catatan penting:
@@ -207,7 +249,6 @@ Karena autentikasi menggunakan httpOnly cookie, aplikasi rentan terhadap CSRF. P
 Endpoint yang tidak perlu CSRF check:
 - `POST /api/v1/payment/callback/*` (validasi via signature dari payment gateway)
 - `POST /api/v1/auth/login` (belum punya cookie)
-- `POST /api/v1/auth/register`
 - `POST /api/v1/auth/refresh` (SameSite=Strict + path cookie terbatas, side effect hanya rotate token)
 
 ---

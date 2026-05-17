@@ -26,6 +26,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
 	"github.com/Sekolahkit/sekolah-app/internal/tahun_ajaran"
 	"github.com/Sekolahkit/sekolah-app/internal/upload"
+	"github.com/Sekolahkit/sekolah-app/internal/user"
 	"github.com/Sekolahkit/sekolah-app/pkg/frontend"
 	"github.com/Sekolahkit/sekolah-app/pkg/config"
 	"github.com/Sekolahkit/sekolah-app/pkg/database"
@@ -114,12 +115,31 @@ func main() {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Post("/auth/logout", authHandler.Logout)
 			r.Get("/auth/me", authHandler.Me)
+			r.Put("/auth/password", authHandler.ChangePassword)
 		})
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Use(mw.RequireRole("admin"))
 			r.Post("/auth/revoke-all/{user_id}", authHandler.RevokeAll)
+		})
+
+		userRepo := user.NewRepository(db)
+		userService := user.NewService(userRepo)
+		userHandler := user.NewHandler(userService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("admin"))
+
+			r.Route("/users", func(r chi.Router) {
+				r.Get("/", userHandler.List)
+				r.Post("/", userHandler.Create)
+				r.Get("/{id}", userHandler.GetByID)
+				r.Put("/{id}", userHandler.Update)
+				r.Delete("/{id}", userHandler.Deactivate)
+				r.Post("/{id}/reset-password", userHandler.ResetPassword)
+			})
 		})
 
 		sekolahRepo := sekolah.NewRepository(db)

@@ -211,6 +211,35 @@ func (s *Service) generateAndSaveRefreshToken(penggunaID int64, deviceInfo strin
 	return tokenStr, nil
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func (s *Service) ChangePassword(userID int64, req ChangePasswordRequest) error {
+	user, err := s.repo.FindUserByID(userID)
+	if err != nil {
+		return fmt.Errorf("user tidak ditemukan")
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword)); err != nil {
+		return fmt.Errorf("password lama salah")
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash password: %w", err)
+	}
+
+	if err := s.repo.UpdatePassword(userID, string(hashed)); err != nil {
+		return fmt.Errorf("update password: %w", err)
+	}
+
+	s.repo.RevokeAllUserTokens(userID)
+
+	return nil
+}
+
 func (s *Service) checkLockout(sekolahID *int64, email string) time.Duration {
 	since := time.Now().Add(-30 * time.Minute)
 	count, err := s.repo.CountRecentFailedAttempts(sekolahID, email, since)

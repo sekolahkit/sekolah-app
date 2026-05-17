@@ -2,7 +2,7 @@ import { Outlet, NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '@/hooks/use-auth-hook'
 import { useTheme } from '@/hooks/use-theme-hook'
 import { cn } from '@/lib/utils'
-import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Moon, Sun, Monitor, GraduationCap, BarChart3, Bell } from 'lucide-react'
+import { LayoutDashboard, Users, CreditCard, Settings, LogOut, Moon, Sun, Monitor, GraduationCap, BarChart3, Bell, KeyRound, UserCog } from 'lucide-react'
 
 const navItems = [
   { to: '/', icon: LayoutDashboard, label: 'Dashboard', roles: ['admin', 'operator', 'guru', 'siswa', 'orangtua'] },
@@ -11,6 +11,8 @@ const navItems = [
   { to: '/ppdb', icon: GraduationCap, label: 'PPDB', roles: ['admin', 'operator'] },
   { to: '/laporan', icon: BarChart3, label: 'Laporan', roles: ['admin', 'operator'] },
   { to: '/notifikasi', icon: Bell, label: 'Notifikasi', roles: ['admin'] },
+  { to: '/pengguna', icon: UserCog, label: 'Pengguna', roles: ['admin'] },
+  { to: '/ubah-password', icon: KeyRound, label: 'Ubah Password', roles: ['admin', 'operator', 'guru', 'siswa', 'orangtua'] },
   { to: '/pengaturan', icon: Settings, label: 'Pengaturan', roles: ['admin'] },
 ]
 
