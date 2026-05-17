@@ -7,9 +7,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/Sekolahkit/sekolah-app/internal/auth"
+	"github.com/Sekolahkit/sekolah-app/internal/backup"
 	"github.com/Sekolahkit/sekolah-app/internal/kelas"
 	"github.com/Sekolahkit/sekolah-app/internal/laporan"
 	"github.com/Sekolahkit/sekolah-app/internal/migration"
@@ -123,6 +126,26 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 				r.Post("/", rekeningHandler.Create)
 				r.Put("/{id}", rekeningHandler.Update)
 				r.Delete("/{id}", rekeningHandler.Delete)
+			})
+
+			backupTmpDir := t.TempDir()
+			backupDBPath := filepath.Join(backupTmpDir, "test_sekolah.db")
+			os.WriteFile(backupDBPath, []byte("test db content"), 0644)
+			backupUploadDir := filepath.Join(backupTmpDir, "uploads")
+			os.MkdirAll(backupUploadDir, 0755)
+			backupService := backup.NewService(backup.Config{
+				BackupPath: filepath.Join(backupTmpDir, "backups"),
+				DBPath:     backupDBPath,
+				UploadPath: backupUploadDir,
+				Retention:  7,
+			})
+			backupHandler := backup.NewHandler(backupService)
+
+			r.Route("/backup", func(r chi.Router) {
+				r.Get("/", backupHandler.List)
+				r.Post("/", backupHandler.Create)
+				r.Get("/{id}/download", backupHandler.Download)
+				r.Post("/restore/{id}", backupHandler.Restore)
 			})
 		})
 
@@ -1044,5 +1067,153 @@ func TestExport_LaporanSiswa_ReturnsXLSX(t *testing.T) {
 	ct := resp.Header.Get("Content-Type")
 	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
 		t.Errorf("expected XLSX content type, got %s", ct)
+	}
+}
+
+func TestBackup_Create(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, result := authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+	if resp.StatusCode != 201 {
+		t.Fatalf("expected 201, got %d", resp.StatusCode)
+	}
+
+	data := result["data"].(map[string]interface{})
+	if data["id"] == nil || data["id"] == "" {
+		t.Error("backup ID kosong")
+	}
+	if data["filename"] == nil || data["filename"] == "" {
+		t.Error("backup filename kosong")
+	}
+	if data["checksum"] == nil || data["checksum"] == "" {
+		t.Error("backup checksum kosong")
+	}
+}
+
+func TestBackup_List(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+
+	resp, result := authRequest("GET", server.URL+"/api/v1/backup", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+
+	data := result["data"].([]interface{})
+	if len(data) < 1 {
+		t.Error("expected at least 1 backup")
+	}
+}
+
+func TestBackup_Download(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	_, createResult := authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+	backupID := createResult["data"].(map[string]interface{})["id"].(string)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/backup/"+backupID+"/download", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{CheckRedirect: func(req *http.Request, via []*http.Request) error { return http.ErrUseLastResponse }}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/gzip" {
+		t.Errorf("expected gzip content type, got %s", ct)
+	}
+}
+
+func TestBackup_Download_PathTraversal(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/backup/../../etc/passwd/download", nil, cookies)
+	if resp.StatusCode != 400 && resp.StatusCode != 404 {
+		t.Errorf("expected 400 or 404 for path traversal, got %d", resp.StatusCode)
+	}
+}
+
+func TestBackup_Restore_RequiresConfirmation(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	_, createResult := authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+	backupID := createResult["data"].(map[string]interface{})["id"].(string)
+
+	resp, result := authRequest("POST", server.URL+"/api/v1/backup/restore/"+backupID,
+		map[string]interface{}{"confirm": "WRONG", "backup_id": backupID}, cookies)
+	if resp.StatusCode != 400 {
+		t.Fatalf("expected 400 for wrong confirmation, got %d", resp.StatusCode)
+	}
+	if result["error"].(map[string]interface{})["code"] != "CONFIRMATION_REQUIRED" {
+		t.Errorf("expected CONFIRMATION_REQUIRED error code, got %v", result["error"])
+	}
+}
+
+func TestBackup_Restore_Success(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	_, createResult := authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+	backupID := createResult["data"].(map[string]interface{})["id"].(string)
+
+	resp, result := authRequest("POST", server.URL+"/api/v1/backup/restore/"+backupID,
+		map[string]interface{}{"confirm": "RESTORE", "backup_id": backupID}, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200 for valid restore, got %d: %v", resp.StatusCode, result)
+	}
+}
+
+func TestBackup_Restore_MismatchedID(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	_, createResult := authRequest("POST", server.URL+"/api/v1/backup", nil, cookies)
+	backupID := createResult["data"].(map[string]interface{})["id"].(string)
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/backup/restore/"+backupID,
+		map[string]interface{}{"confirm": "RESTORE", "backup_id": "wrong_id"}, cookies)
+	if resp.StatusCode != 400 {
+		t.Errorf("expected 400 for mismatched ID, got %d", resp.StatusCode)
+	}
+}
+
+func TestBackup_AdminOnly(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/backup", nil, nil)
+	if resp.StatusCode != 401 {
+		t.Errorf("expected 401 without auth, got %d", resp.StatusCode)
+	}
+}
+
+func TestBackup_Download_NotFound(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/backup/nonexistent/download", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404 for nonexistent backup, got %d", resp.StatusCode)
 	}
 }

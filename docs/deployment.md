@@ -212,19 +212,57 @@ sekolah.example.com {
 
 ## Backup Strategy
 
-### Auto Backup
+### API Backup (Recommended)
 
-Aplikasi sudah built-in auto backup. Konfigurasi di `config.yaml`:
+Backup tersedia via API admin. Endpoint: `/api/v1/backup`
+
+```bash
+# Buat backup via API (admin only)
+curl -X POST http://localhost:8080/api/v1/backup \
+  -H "Cookie: access_token=..."
+
+# List backup
+curl http://localhost:8080/api/v1/backup \
+  -H "Cookie: access_token=..."
+
+# Download backup
+curl http://localhost:8080/api/v1/backup/{id}/download \
+  -H "Cookie: access_token=..." -o backup.tar.gz
+
+# Restore (dengan konfirmasi)
+curl -X POST http://localhost:8080/api/v1/backup/restore/{id} \
+  -H "Content-Type: application/json" \
+  -H "Cookie: access_token=..." \
+  -d '{"confirm":"RESTORE","backup_id":"{id}"}'
+```
+
+Backup juga tersedia di halaman **Pengaturan > Backup & Restore** di admin UI.
+
+### Backup Format
+
+Backup disimpan sebagai `.tar.gz` yang berisi:
+- `sekolah.db` — Database SQLite
+- `uploads/` — Semua file upload
+- `metadata.json` — Informasi backup (timestamp, checksum, versi)
+
+### Backup Config
 
 ```yaml
 backup:
-  enabled: true
-  schedule: "0 2 * * *"    # Jam 2 pagi
-  retention: 7             # Simpan 7 hari
-  path: "./backups"
+  retention: 7             # Simpan backup terakhir (hari)
+  path: "./backups"        # Direktori penyimpanan backup
 ```
 
-### Manual Backup
+> **Penting:** Backup disimpan di direktori lokal. Jangan simpan di folder yang bisa diakses publik. Untuk produksi, salin backup ke storage terpisah (S3, NAS, dll).
+
+### Restore
+
+Restore mengganti database dan file upload. Sebelum restore:
+1. Pastikan aplikasi dalam maintenance mode
+2. Backup otomatis dibuat sebelum restore
+3. Restart aplikasi setelah restore selesai
+
+### Manual Backup (Alternatif)
 
 ```bash
 # Backup database
@@ -232,16 +270,6 @@ cp /opt/sekolah-app/data/sekolah.db /backup/sekolah-$(date +%Y%m%d).db
 
 # Backup uploads
 tar -czf /backup/uploads-$(date +%Y%m%d).tar.gz /opt/sekolah-app/uploads/
-```
-
-### Restore
-
-```bash
-# Restore database
-cp /backup/sekolah-20240115.db /opt/sekolah-app/data/sekolah.db
-
-# Restore uploads
-tar -xzf /backup/uploads-20240115.tar.gz -C /
 ```
 
 ---
