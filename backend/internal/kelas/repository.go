@@ -21,15 +21,17 @@ type Kelas struct {
 	Nama          string `json:"nama"`
 	Tingkat       string `json:"tingkat"`
 	JurusanID     int64  `json:"jurusan_id"`
-	WaliKelas     string `json:"wali_kelas"`
+	WaliKelasID   *int64 `json:"wali_kelas_id"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
 }
 
 type KelasSiswa struct {
-	ID       int64 `json:"id"`
-	KelasID  int64 `json:"kelas_id"`
-	SiswaID  int64 `json:"siswa_id"`
+	ID            int64 `json:"id"`
+	KelasID       int64 `json:"kelas_id"`
+	SiswaID       int64 `json:"siswa_id"`
+	SekolahID     int64 `json:"sekolah_id"`
+	TahunAjaranID int64 `json:"tahun_ajaran_id"`
 }
 
 type ListParams struct {
@@ -43,7 +45,7 @@ type ListParams struct {
 
 func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, error) {
 	query := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat",
-		"COALESCE(jurusan_id,0)", "wali_kelas", "created_at", "updated_at").
+		"COALESCE(jurusan_id,0)", "COALESCE(wali_kelas_id,0)", "created_at", "updated_at").
 		From("kelas").
 		Where(sq.Eq{"sekolah_id": sekolahID})
 
@@ -78,9 +80,13 @@ func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, err
 	var list []Kelas
 	for rows.Next() {
 		var k Kelas
-		err := rows.Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
+		var waliID int64
+		err := rows.Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &waliID, &k.CreatedAt, &k.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
+		}
+		if waliID != 0 {
+			k.WaliKelasID = &waliID
 		}
 		list = append(list, k)
 	}
@@ -89,22 +95,26 @@ func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, err
 
 func (r *Repository) GetByID(sekolahID, id int64) (*Kelas, error) {
 	var k Kelas
+	var waliID int64
 	err := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat",
-		"COALESCE(jurusan_id,0)", "wali_kelas", "created_at", "updated_at").
+		"COALESCE(jurusan_id,0)", "COALESCE(wali_kelas_id,0)", "created_at", "updated_at").
 		From("kelas").
 		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
 		RunWith(r.db).QueryRow().
-		Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
+		Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &waliID, &k.CreatedAt, &k.UpdatedAt)
 	if err != nil {
 		return nil, err
+	}
+	if waliID != 0 {
+		k.WaliKelasID = &waliID
 	}
 	return &k, nil
 }
 
 func (r *Repository) Create(k *Kelas) (int64, error) {
 	result, err := sq.Insert("kelas").
-		Columns("sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "jurusan_id", "wali_kelas").
-		Values(k.SekolahID, k.TahunAjaranID, k.Nama, k.Tingkat, nullInt64(k.JurusanID), k.WaliKelas).
+		Columns("sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "jurusan_id", "wali_kelas_id").
+		Values(k.SekolahID, k.TahunAjaranID, k.Nama, k.Tingkat, nullInt64(k.JurusanID), k.WaliKelasID).
 		RunWith(r.db).Exec()
 	if err != nil {
 		return 0, err
@@ -118,7 +128,7 @@ func (r *Repository) Update(sekolahID, id int64, k *Kelas) error {
 		Set("nama", k.Nama).
 		Set("tingkat", k.Tingkat).
 		Set("jurusan_id", nullInt64(k.JurusanID)).
-		Set("wali_kelas", k.WaliKelas).
+		Set("wali_kelas_id", k.WaliKelasID).
 		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
 		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
 		RunWith(r.db).Exec()
@@ -139,23 +149,25 @@ func (r *Repository) Delete(sekolahID, id int64) error {
 	return err
 }
 
-func (r *Repository) AddSiswa(kelasID, siswaID int64) error {
+func (r *Repository) AddSiswa(sekolahID, kelasID, siswaID, tahunAjaranID int64) error {
 	_, err := sq.Insert("kelas_siswa").
-		Columns("kelas_id", "siswa_id").
-		Values(kelasID, siswaID).
+		Columns("sekolah_id", "kelas_id", "siswa_id", "tahun_ajaran_id").
+		Values(sekolahID, kelasID, siswaID, tahunAjaranID).
 		RunWith(r.db).Exec()
 	return err
 }
 
-func (r *Repository) RemoveSiswa(kelasID, siswaID int64) error {
+func (r *Repository) RemoveSiswa(sekolahID, kelasID, siswaID int64) error {
 	_, err := sq.Delete("kelas_siswa").
-		Where(sq.Eq{"kelas_id": kelasID, "siswa_id": siswaID}).
+		Where(sq.Eq{"sekolah_id": sekolahID, "kelas_id": kelasID, "siswa_id": siswaID}).
 		RunWith(r.db).Exec()
 	return err
 }
 
-func (r *Repository) ListSiswa(kelasID int64) ([]int64, error) {
-	rows, err := sq.Select("siswa_id").From("kelas_siswa").Where(sq.Eq{"kelas_id": kelasID}).RunWith(r.db).Query()
+func (r *Repository) ListSiswa(sekolahID, kelasID int64) ([]int64, error) {
+	rows, err := sq.Select("siswa_id").From("kelas_siswa").
+		Where(sq.Eq{"sekolah_id": sekolahID, "kelas_id": kelasID}).
+		RunWith(r.db).Query()
 	if err != nil {
 		return nil, err
 	}
@@ -183,8 +195,10 @@ func (r *Repository) SiswaExistsInSekolah(sekolahID, siswaID int64) bool {
 	return count > 0
 }
 
-func (r *Repository) SiswaInKelas(kelasID, siswaID int64) (bool, error) {
+func (r *Repository) SiswaInKelas(sekolahID, kelasID, siswaID int64) (bool, error) {
 	var count int
-	err := sq.Select("COUNT(*)").From("kelas_siswa").Where(sq.Eq{"kelas_id": kelasID, "siswa_id": siswaID}).RunWith(r.db).QueryRow().Scan(&count)
+	err := sq.Select("COUNT(*)").From("kelas_siswa").
+		Where(sq.Eq{"sekolah_id": sekolahID, "kelas_id": kelasID, "siswa_id": siswaID}).
+		RunWith(r.db).QueryRow().Scan(&count)
 	return count > 0, err
 }
