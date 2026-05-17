@@ -222,6 +222,7 @@ SMTP_HOST=smtp.gmail.com
 SMTP_PORT=587
 SMTP_USER=your-email@gmail.com
 SMTP_PASSWORD=your-16-char-app-password
+SMTP_FROM=noreply@sekolah.com  # opsional
 ```
 
 ### SMTP Lain
@@ -232,6 +233,17 @@ SMTP_PORT=587
 SMTP_USER=your-email@domain.com
 SMTP_PASSWORD=your-password
 ```
+
+### Consent & Preferensi
+
+Worker tidak mengirim notifikasi jika:
+- Tidak ada preferensi untuk kanal+tujuan tersebut
+- `enabled = false`
+- `consent_status != 'granted'`
+
+Status konsen: `pending` | `granted` | `revoked`
+
+Kelola via admin: `GET/PUT /api/v1/notifikasi/preferensi`
 
 ---
 
