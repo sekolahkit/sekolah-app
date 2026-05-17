@@ -256,3 +256,7 @@ func (s *Service) UpsertKonfigurasiRanking(sekolahID int64, req KonfigurasiRanki
 func (s *Service) GetPengumuman(pendaftaranID int64) (*Pengumuman, error) {
 	return s.repo.GetPengumumanByPendaftaranID(pendaftaranID)
 }
+
+func (s *Service) ExportPendaftar(sekolahID int64, params ListParams) ([]Pendaftaran, error) {
+	return s.repo.ListAllPendaftaran(sekolahID, params)
+}

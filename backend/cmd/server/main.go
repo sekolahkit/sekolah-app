@@ -224,7 +224,9 @@ func main() {
 
 			r.Route("/pembayaran", func(r chi.Router) {
 				r.Get("/", pembayaranHandler.ListPembayaran)
+				r.Get("/export", pembayaranHandler.Export)
 				r.Get("/{id}", pembayaranHandler.GetPembayaranByID)
+				r.Get("/{id}/kwitansi", pembayaranHandler.Kwitansi)
 				r.Post("/", pembayaranHandler.CreatePembayaran)
 				r.Put("/{id}/verify", pembayaranHandler.VerifyPembayaran)
 				r.Put("/{id}/reject", pembayaranHandler.RejectPembayaran)
@@ -263,6 +265,7 @@ func main() {
 			r.Use(mw.RequireRole("admin", "operator"))
 
 			r.Get("/ppdb/pendaftar", ppdbHandler.ListPendaftar)
+			r.Get("/ppdb/export", ppdbHandler.Export)
 			r.Get("/ppdb/pendaftar/{id}", ppdbHandler.GetPendaftar)
 			r.Put("/ppdb/pendaftar/{id}", ppdbHandler.UpdateStatus)
 			r.Get("/ppdb/pendaftar/{id}/berkas", ppdbHandler.ListBerkas)
@@ -353,8 +356,11 @@ func main() {
 			r.Use(mw.RequireRole("admin", "operator"))
 			r.Get("/dashboard/operator", laporanHandler.DashboardOperator)
 			r.Get("/laporan/pembayaran", laporanHandler.RekapPembayaran)
+			r.Get("/laporan/pembayaran/export", laporanHandler.ExportPembayaran)
 			r.Get("/laporan/ppdb", laporanHandler.RekapPPDB)
+			r.Get("/laporan/ppdb/export", laporanHandler.ExportPPDB)
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
+			r.Get("/laporan/siswa/export", laporanHandler.ExportSiswa)
 		})
 
 		uploadService := upload.NewService("./uploads", cfg.Upload.MaxSize, cfg.Upload.AllowedTypes)

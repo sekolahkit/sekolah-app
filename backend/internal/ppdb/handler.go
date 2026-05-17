@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Sekolahkit/sekolah-app/pkg/export"
 	"github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/Sekolahkit/sekolah-app/pkg/response"
 	"github.com/Sekolahkit/sekolah-app/pkg/validator"
@@ -256,5 +257,53 @@ func parseListParams(r *http.Request) ListParams {
 		Limit:         limit,
 		Status:        r.URL.Query().Get("status"),
 		TahunAjaranID: tahunAjaranID,
+	}
+}
+
+func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	params := parseListParams(r)
+
+	list, err := h.service.ExportPendaftar(user.SekolahID, params)
+	if err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal mengambil data pendaftar")
+		return
+	}
+
+	cols := []export.Column{
+		{Header: "No", Width: 6},
+		{Header: "Nama Lengkap", Width: 25},
+		{Header: "NIK", Width: 20},
+		{Header: "Jenis Kelamin", Width: 14},
+		{Header: "Tempat, Tanggal Lahir", Width: 22},
+		{Header: "Agama", Width: 10},
+		{Header: "Alamat", Width: 30},
+		{Header: "Asal Sekolah", Width: 22},
+		{Header: "No HP", Width: 14},
+		{Header: "Email", Width: 22},
+		{Header: "Nama Ortu", Width: 22},
+		{Header: "No HP Ortu", Width: 14},
+		{Header: "Pekerjaan Ortu", Width: 18},
+		{Header: "Status", Width: 14},
+	}
+
+	var rows [][]string
+	for i, p := range list {
+		ttl := p.TempatLahir
+		if p.TanggalLahir != "" {
+			if ttl != "" {
+				ttl += ", "
+			}
+			ttl += p.TanggalLahir
+		}
+		rows = append(rows, []string{
+			strconv.Itoa(i + 1), p.NamaLengkap, p.NIK, p.JenisKelamin,
+			ttl, p.Agama, p.Alamat, p.AsalSekolah, p.NoHP, p.Email,
+			p.NamaOrtu, p.NoHPOrtu, p.PekerjaanOrtu, p.Status,
+		})
+	}
+
+	if err := export.WriteXLSX(w, "data-ppdb.xlsx", cols, rows); err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal membuat file export")
 	}
 }

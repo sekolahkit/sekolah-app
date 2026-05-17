@@ -166,3 +166,39 @@ func (r *Repository) NISExists(sekolahID int64, nis string, excludeID int64) (bo
 	err := query.RunWith(r.db).QueryRow().Scan(&count)
 	return count > 0, err
 }
+
+func (r *Repository) ListAll(sekolahID int64, search string) ([]Siswa, error) {
+	query := sq.Select("id", "sekolah_id", "nis", "nama", "jenis_kelamin",
+		"COALESCE(tempat_lahir,'')", "COALESCE(tanggal_lahir,'')", "COALESCE(agama,'')",
+		"COALESCE(alamat,'')", "COALESCE(no_hp,'')", "COALESCE(email,'')",
+		"COALESCE(nama_ortu,'')", "COALESCE(no_hp_ortu,'')", "COALESCE(email_ortu,'')",
+		"COALESCE(tahun_ajaran_masuk,0)", "status", "created_at", "updated_at").
+		From("siswa").
+		Where(sq.Eq{"sekolah_id": sekolahID})
+
+	if search != "" {
+		like := "%" + search + "%"
+		query = query.Where(sq.Or{sq.Like{"nama": like}, sq.Like{"nis": like}})
+	}
+
+	query = query.OrderBy("nama ASC")
+
+	rows, err := query.RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Siswa
+	for rows.Next() {
+		var s Siswa
+		err := rows.Scan(&s.ID, &s.SekolahID, &s.NIS, &s.Nama, &s.JenisKelamin,
+			&s.TempatLahir, &s.TanggalLahir, &s.Agama, &s.Alamat, &s.NoHP, &s.Email,
+			&s.NamaOrtu, &s.NoHPOrtu, &s.EmailOrtu, &s.TahunAjaranMasuk, &s.Status, &s.CreatedAt, &s.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, s)
+	}
+	return list, nil
+}

@@ -506,3 +506,110 @@ func (r *Repository) KategoriExistsInSekolah(sekolahID, kategoriID int64) bool {
 	}
 	return count > 0
 }
+
+type ExportTagihanRow struct {
+	SiswaNIS    string
+	SiswaNama   string
+	KategoriNama string
+	TahunAjaranNama string
+	Semester    string
+	Nominal     float64
+	JatuhTempo  string
+	Status      string
+}
+
+func (r *Repository) ExportTagihan(sekolahID int64, params TagihanListParams) ([]ExportTagihanRow, error) {
+	query := sq.Select(
+		"COALESCE(s.nis,'')", "COALESCE(s.nama,'')",
+		"COALESCE(kp.nama,'')", "COALESCE(ta.nama,'')",
+		"COALESCE(t.semester,'')", "t.nominal",
+		"COALESCE(t.jatuh_tempo,'')", "t.status",
+	).
+		From("tagihan t").
+		Join("siswa s ON s.id = t.siswa_id").
+		LeftJoin("kategori_pembayaran kp ON kp.id = t.kategori_id").
+		LeftJoin("tahun_ajaran ta ON ta.id = t.tahun_ajaran_id").
+		Where(sq.Eq{"t.sekolah_id": sekolahID})
+
+	if params.SiswaID > 0 {
+		query = query.Where(sq.Eq{"t.siswa_id": params.SiswaID})
+	}
+	if params.KategoriID > 0 {
+		query = query.Where(sq.Eq{"t.kategori_id": params.KategoriID})
+	}
+	if params.TahunAjaranID > 0 {
+		query = query.Where(sq.Eq{"t.tahun_ajaran_id": params.TahunAjaranID})
+	}
+	if params.Status != "" {
+		query = query.Where(sq.Eq{"t.status": params.Status})
+	}
+
+	query = query.OrderBy("s.nama ASC, t.created_at DESC")
+
+	rows, err := query.RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ExportTagihanRow
+	for rows.Next() {
+		var e ExportTagihanRow
+		if err := rows.Scan(&e.SiswaNIS, &e.SiswaNama, &e.KategoriNama, &e.TahunAjaranNama,
+			&e.Semester, &e.Nominal, &e.JatuhTempo, &e.Status); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, nil
+}
+
+type KwitansiData struct {
+	SekolahNama       string
+	SiswaNama         string
+	SiswaNIS          string
+	KategoriNama      string
+	TahunAjaranNama   string
+	NominalTagihan    float64
+	JumlahBayar       float64
+	TanggalBayar      string
+	MetodeBayar       string
+	StatusBayar       string
+	VerifiedAt        string
+	Catatan           string
+}
+
+func (r *Repository) GetKwitansiData(sekolahID, pembayaranID int64) (*KwitansiData, error) {
+	var d KwitansiData
+	err := r.db.QueryRow(`
+		SELECT
+			COALESCE(sk.nama,''),
+			COALESCE(s.nama,''),
+			COALESCE(s.nis,''),
+			COALESCE(kp.nama,''),
+			COALESCE(ta.nama,''),
+			t.nominal,
+			p.jumlah,
+			p.tanggal,
+			p.metode,
+			p.status,
+			COALESCE(p.verified_at,''),
+			COALESCE(p.catatan,'')
+		FROM pembayaran p
+		JOIN tagihan t ON t.id = p.tagihan_id
+		JOIN sekolah sk ON sk.id = t.sekolah_id
+		JOIN siswa s ON s.id = p.siswa_id
+		LEFT JOIN kategori_pembayaran kp ON kp.id = t.kategori_id
+		LEFT JOIN tahun_ajaran ta ON ta.id = t.tahun_ajaran_id
+		WHERE p.id = ? AND t.sekolah_id = ?
+	`, pembayaranID, sekolahID).Scan(
+		&d.SekolahNama, &d.SiswaNama, &d.SiswaNIS,
+		&d.KategoriNama, &d.TahunAjaranNama,
+		&d.NominalTagihan, &d.JumlahBayar, &d.TanggalBayar,
+		&d.MetodeBayar, &d.StatusBayar, &d.VerifiedAt, &d.Catatan,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &d, nil
+}
