@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { usePendaftarList, useUpdatePendaftarStatus, useBerkasList, useVerifikasiBerkas, usePublishPengumuman } from '@/hooks/use-ppdb'
+import { useTahunAjaranList, useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { cn } from '@/lib/utils'
 import { Search, Eye, X, FileText, Check, Download, Loader2 } from 'lucide-react'
 import { downloadExport } from '@/lib/export'
@@ -8,11 +9,15 @@ import type { Berkas } from '@/hooks/use-ppdb'
 export function PpdbAdminPage() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [tahunAjaranFilter, setTahunAjaranFilter] = useState('')
   const [search, setSearch] = useState('')
   const [selectedId, setSelectedId] = useState<number | null>(null)
   const [exporting, setExporting] = useState(false)
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
 
-  const { data, isLoading } = usePendaftarList({ page, limit: 20, status: statusFilter || undefined, search: search || undefined })
+  const effectiveTA = tahunAjaranFilter || (taAktif?.id ? String(taAktif.id) : '')
+  const { data, isLoading } = usePendaftarList({ page, limit: 20, status: statusFilter || undefined, tahun_ajaran_id: effectiveTA ? Number(effectiveTA) : undefined, search: search || undefined })
 
   async function handleExport() {
     setExporting(true)
@@ -46,6 +51,12 @@ export function PpdbAdminPage() {
           <option value="cadangan">Cadangan</option>
           <option value="tidak_diterima">Tidak Diterima</option>
           <option value="daftar_ulang">Daftar Ulang</option>
+        </select>
+        <select value={effectiveTA} onChange={(e) => { setTahunAjaranFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+          <option value="">Semua Tahun</option>
+          {taList?.map((ta) => (
+            <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+          ))}
         </select>
       </div>
 

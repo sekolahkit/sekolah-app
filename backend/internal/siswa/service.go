@@ -15,33 +15,35 @@ func NewService(repo *Repository) *Service {
 }
 
 type CreateRequest struct {
-	NIS          string `json:"nis"`
-	Nama         string `json:"nama"`
-	JenisKelamin string `json:"jenis_kelamin"`
-	TempatLahir  string `json:"tempat_lahir"`
-	TanggalLahir string `json:"tanggal_lahir"`
-	Agama        string `json:"agama"`
-	Alamat       string `json:"alamat"`
-	NoHP         string `json:"no_hp"`
-	Email        string `json:"email"`
-	NamaOrtu     string `json:"nama_ortu"`
-	NoHPOrtu     string `json:"no_hp_ortu"`
-	EmailOrtu    string `json:"email_ortu"`
+	NIS              string `json:"nis"`
+	Nama             string `json:"nama"`
+	JenisKelamin     string `json:"jenis_kelamin"`
+	TempatLahir      string `json:"tempat_lahir"`
+	TanggalLahir     string `json:"tanggal_lahir"`
+	Agama            string `json:"agama"`
+	Alamat           string `json:"alamat"`
+	NoHP             string `json:"no_hp"`
+	Email            string `json:"email"`
+	NamaOrtu         string `json:"nama_ortu"`
+	NoHPOrtu         string `json:"no_hp_ortu"`
+	EmailOrtu        string `json:"email_ortu"`
+	TahunAjaranMasuk int64  `json:"tahun_ajaran_masuk"`
 }
 
 type UpdateRequest struct {
-	NIS          string `json:"nis"`
-	Nama         string `json:"nama"`
-	JenisKelamin string `json:"jenis_kelamin"`
-	TempatLahir  string `json:"tempat_lahir"`
-	TanggalLahir string `json:"tanggal_lahir"`
-	Agama        string `json:"agama"`
-	Alamat       string `json:"alamat"`
-	NoHP         string `json:"no_hp"`
-	Email        string `json:"email"`
-	NamaOrtu     string `json:"nama_ortu"`
-	NoHPOrtu     string `json:"no_hp_ortu"`
-	EmailOrtu    string `json:"email_ortu"`
+	NIS              string `json:"nis"`
+	Nama             string `json:"nama"`
+	JenisKelamin     string `json:"jenis_kelamin"`
+	TempatLahir      string `json:"tempat_lahir"`
+	TanggalLahir     string `json:"tanggal_lahir"`
+	Agama            string `json:"agama"`
+	Alamat           string `json:"alamat"`
+	NoHP             string `json:"no_hp"`
+	Email            string `json:"email"`
+	NamaOrtu         string `json:"nama_ortu"`
+	NoHPOrtu         string `json:"no_hp_ortu"`
+	EmailOrtu        string `json:"email_ortu"`
+	TahunAjaranMasuk int64  `json:"tahun_ajaran_masuk"`
 }
 
 func (s *Service) List(sekolahID int64, params ListParams) ([]Siswa, int, error) {
@@ -72,19 +74,20 @@ func (s *Service) Create(sekolahID int64, req CreateRequest) (*Siswa, error) {
 	}
 
 	siswa := &Siswa{
-		SekolahID:    sekolahID,
-		NIS:          req.NIS,
-		Nama:         req.Nama,
-		JenisKelamin: req.JenisKelamin,
-		TempatLahir:  req.TempatLahir,
-		TanggalLahir: req.TanggalLahir,
-		Agama:        req.Agama,
-		Alamat:       req.Alamat,
-		NoHP:         req.NoHP,
-		Email:        req.Email,
-		NamaOrtu:     req.NamaOrtu,
-		NoHPOrtu:     req.NoHPOrtu,
-		EmailOrtu:    req.EmailOrtu,
+		SekolahID:         sekolahID,
+		NIS:               req.NIS,
+		Nama:              req.Nama,
+		JenisKelamin:      req.JenisKelamin,
+		TempatLahir:       req.TempatLahir,
+		TanggalLahir:      req.TanggalLahir,
+		Agama:             req.Agama,
+		Alamat:            req.Alamat,
+		NoHP:              req.NoHP,
+		Email:             req.Email,
+		NamaOrtu:          req.NamaOrtu,
+		NoHPOrtu:          req.NoHPOrtu,
+		EmailOrtu:         req.EmailOrtu,
+		TahunAjaranMasuk:  req.TahunAjaranMasuk,
 	}
 
 	id, err := s.repo.Create(siswa)
@@ -115,18 +118,19 @@ func (s *Service) Update(sekolahID, id int64, req UpdateRequest) (*Siswa, error)
 	}
 
 	siswa := &Siswa{
-		NIS:          req.NIS,
-		Nama:         req.Nama,
-		JenisKelamin: req.JenisKelamin,
-		TempatLahir:  req.TempatLahir,
-		TanggalLahir: req.TanggalLahir,
-		Agama:        req.Agama,
-		Alamat:       req.Alamat,
-		NoHP:         req.NoHP,
-		Email:        req.Email,
-		NamaOrtu:     req.NamaOrtu,
-		NoHPOrtu:     req.NoHPOrtu,
-		EmailOrtu:    req.EmailOrtu,
+		NIS:               req.NIS,
+		Nama:              req.Nama,
+		JenisKelamin:      req.JenisKelamin,
+		TempatLahir:       req.TempatLahir,
+		TanggalLahir:      req.TanggalLahir,
+		Agama:             req.Agama,
+		Alamat:            req.Alamat,
+		NoHP:              req.NoHP,
+		Email:             req.Email,
+		NamaOrtu:          req.NamaOrtu,
+		NoHPOrtu:          req.NoHPOrtu,
+		EmailOrtu:         req.EmailOrtu,
+		TahunAjaranMasuk:  req.TahunAjaranMasuk,
 	}
 
 	if err := s.repo.Update(sekolahID, id, siswa); err != nil {

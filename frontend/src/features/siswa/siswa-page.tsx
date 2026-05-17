@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useSiswaList, useCreateSiswa, useUpdateSiswa, useDeleteSiswa } from '@/hooks/use-siswa'
+import { useTahunAjaranList } from '@/hooks/use-tahun-ajaran'
 import { useAuth } from '@/hooks/use-auth-hook'
 import { cn } from '@/lib/utils'
 import { Plus, Search, Edit2, Trash2, X, Download, Loader2 } from 'lucide-react'
@@ -157,6 +158,7 @@ function StatusBadge({ status }: { status: string }) {
 function SiswaFormDialog({ siswa, onClose }: { siswa: Siswa | null; onClose: () => void }) {
   const createMutation = useCreateSiswa()
   const updateMutation = useUpdateSiswa()
+  const { data: taList } = useTahunAjaranList()
   const [error, setError] = useState('')
 
   const [form, setForm] = useState({
@@ -171,6 +173,7 @@ function SiswaFormDialog({ siswa, onClose }: { siswa: Siswa | null; onClose: () 
     email: siswa?.email || '',
     nama_ortu: siswa?.nama_ortu || '',
     no_hp_ortu: siswa?.no_hp_ortu || '',
+    tahun_ajaran_masuk: siswa?.tahun_ajaran_masuk ? String(siswa.tahun_ajaran_masuk) : '',
   })
 
   function handleChange(field: string, value: string) {
@@ -181,10 +184,11 @@ function SiswaFormDialog({ siswa, onClose }: { siswa: Siswa | null; onClose: () 
     e.preventDefault()
     setError('')
     try {
+      const data = { ...form, tahun_ajaran_masuk: form.tahun_ajaran_masuk ? Number(form.tahun_ajaran_masuk) : 0 }
       if (siswa) {
-        await updateMutation.mutateAsync({ id: siswa.id, data: form })
+        await updateMutation.mutateAsync({ id: siswa.id, data })
       } else {
-        await createMutation.mutateAsync(form)
+        await createMutation.mutateAsync(data)
       }
       onClose()
     } catch (err: unknown) {
@@ -230,6 +234,15 @@ function SiswaFormDialog({ siswa, onClose }: { siswa: Siswa | null; onClose: () 
           <div className="grid grid-cols-2 gap-3">
             <FormField label="Nama Orangtua" value={form.nama_ortu} onChange={(v) => handleChange('nama_ortu', v)} />
             <FormField label="No HP Orangtua" value={form.no_hp_ortu} onChange={(v) => handleChange('no_hp_ortu', v)} />
+          </div>
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-muted-foreground">Tahun Ajaran Masuk</label>
+            <select value={form.tahun_ajaran_masuk} onChange={(e) => handleChange('tahun_ajaran_masuk', e.target.value)} className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+              <option value="">-</option>
+              {taList?.map((ta) => (
+                <option key={ta.id} value={ta.id}>{ta.nama}</option>
+              ))}
+            </select>
           </div>
 
           {error && <p className="text-sm text-destructive">{error}</p>}

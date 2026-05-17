@@ -32,6 +32,7 @@ export interface Siswa {
   nama_ortu: string
   no_hp_ortu: string
   email_ortu: string
+  tahun_ajaran_masuk: number
   status: string
   created_at: string
   updated_at: string

@@ -57,13 +57,14 @@ type Pembayaran struct {
 }
 
 type TagihanListParams struct {
-	Page       int
-	Limit      int
-	Sort       string
-	Order      string
-	SiswaID    int64
-	KategoriID int64
-	Status     string
+	Page          int
+	Limit         int
+	Sort          string
+	Order         string
+	SiswaID       int64
+	KategoriID    int64
+	TahunAjaranID int64
+	Status        string
 }
 
 type PembayaranListParams struct {
@@ -153,6 +154,10 @@ func (r *Repository) ListTagihan(sekolahID int64, params TagihanListParams) ([]T
 	if params.KategoriID > 0 {
 		query = query.Where(sq.Eq{"kategori_id": params.KategoriID})
 		countQuery = countQuery.Where(sq.Eq{"kategori_id": params.KategoriID})
+	}
+	if params.TahunAjaranID > 0 {
+		query = query.Where(sq.Eq{"tahun_ajaran_id": params.TahunAjaranID})
+		countQuery = countQuery.Where(sq.Eq{"tahun_ajaran_id": params.TahunAjaranID})
 	}
 	if params.Status != "" {
 		query = query.Where(sq.Eq{"status": params.Status})

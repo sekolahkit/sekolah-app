@@ -348,14 +348,16 @@ func parseTagihanListParams(r *http.Request) TagihanListParams {
 	}
 	siswaID, _ := strconv.ParseInt(r.URL.Query().Get("siswa_id"), 10, 64)
 	kategoriID, _ := strconv.ParseInt(r.URL.Query().Get("kategori_id"), 10, 64)
+	tahunAjaranID, _ := strconv.ParseInt(r.URL.Query().Get("tahun_ajaran_id"), 10, 64)
 	return TagihanListParams{
-		Page:       page,
-		Limit:      limit,
-		Sort:       sort,
-		Order:      order,
-		SiswaID:    siswaID,
-		KategoriID: kategoriID,
-		Status:     r.URL.Query().Get("status"),
+		Page:          page,
+		Limit:         limit,
+		Sort:          sort,
+		Order:         order,
+		SiswaID:       siswaID,
+		KategoriID:    kategoriID,
+		TahunAjaranID: tahunAjaranID,
+		Status:        r.URL.Query().Get("status"),
 	}
 }
 

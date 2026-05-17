@@ -7,6 +7,7 @@ interface TagihanListParams {
   limit?: number
   status?: string
   siswa_id?: number
+  tahun_ajaran_id?: number
   search?: string
 }
 

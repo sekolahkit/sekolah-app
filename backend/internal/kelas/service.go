@@ -18,6 +18,7 @@ type CreateRequest struct {
 	TahunAjaranID int64  `json:"tahun_ajaran_id"`
 	Nama          string `json:"nama"`
 	Tingkat       string `json:"tingkat"`
+	JurusanID     int64  `json:"jurusan_id"`
 	WaliKelas     string `json:"wali_kelas"`
 }
 
@@ -25,6 +26,7 @@ type UpdateRequest struct {
 	TahunAjaranID int64  `json:"tahun_ajaran_id"`
 	Nama          string `json:"nama"`
 	Tingkat       string `json:"tingkat"`
+	JurusanID     int64  `json:"jurusan_id"`
 	WaliKelas     string `json:"wali_kelas"`
 }
 
@@ -58,6 +60,7 @@ func (s *Service) Create(sekolahID int64, req CreateRequest) (*Kelas, error) {
 		TahunAjaranID: req.TahunAjaranID,
 		Nama:          req.Nama,
 		Tingkat:       req.Tingkat,
+		JurusanID:     req.JurusanID,
 		WaliKelas:     req.WaliKelas,
 	}
 
@@ -86,6 +89,7 @@ func (s *Service) Update(sekolahID, id int64, req UpdateRequest) (*Kelas, error)
 		TahunAjaranID: req.TahunAjaranID,
 		Nama:          req.Nama,
 		Tingkat:       req.Tingkat,
+		JurusanID:     req.JurusanID,
 		WaliKelas:     req.WaliKelas,
 	}
 
