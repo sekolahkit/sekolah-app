@@ -355,3 +355,77 @@ func TestGetByIDTenantIsolation(t *testing.T) {
 		t.Fatal("expected error for kelas from another sekolah")
 	}
 }
+
+func TestAddSiswaRepoLevelOnConflict(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+	kelasID := createTestKelas(t, db, 1, "X IPA 1", 1)
+
+	if err := repo.AddSiswa(1, kelasID, 1, 1); err != nil {
+		t.Fatalf("first insert failed: %v", err)
+	}
+
+	if err := repo.AddSiswa(1, kelasID, 1, 1); err != nil {
+		t.Fatalf("second insert should be silent no-op, got: %v", err)
+	}
+
+	var count int
+	db.QueryRow(`SELECT COUNT(*) FROM kelas_siswa WHERE sekolah_id = 1 AND kelas_id = ? AND siswa_id = 1 AND tahun_ajaran_id = 1`, kelasID).Scan(&count)
+	if count != 1 {
+		t.Fatalf("expected 1 row, got %d", count)
+	}
+}
+
+func TestSameIDsAcrossSekolahNoCollision(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	repo := NewRepository(db)
+
+	kelasID1 := createTestKelas(t, db, 1, "X IPA 1", 1)
+	kelasID2 := createTestKelas(t, db, 2, "X IPA 1", 2)
+
+	if err := repo.AddSiswa(1, kelasID1, 1, 1); err != nil {
+		t.Fatalf("insert sekolah 1 failed: %v", err)
+	}
+	if err := repo.AddSiswa(2, kelasID2, 3, 2); err != nil {
+		t.Fatalf("insert sekolah 2 failed: %v", err)
+	}
+
+	var count1, count2 int
+	db.QueryRow(`SELECT COUNT(*) FROM kelas_siswa WHERE sekolah_id = 1`).Scan(&count1)
+	db.QueryRow(`SELECT COUNT(*) FROM kelas_siswa WHERE sekolah_id = 2`).Scan(&count2)
+	if count1 != 1 || count2 != 1 {
+		t.Fatalf("expected 1 row per sekolah, got %d and %d", count1, count2)
+	}
+}
+
+func TestSchemaUniqueIndexMatchesMigration(t *testing.T) {
+	db := setupTestDB(t)
+	defer db.Close()
+
+	var sql string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE name = 'kelas_siswa' AND type = 'table'`).Scan(&sql)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !contains(sql, "UNIQUE(sekolah_id, siswa_id, kelas_id, tahun_ajaran_id)") {
+		t.Fatalf("expected UNIQUE constraint with sekolah_id, got: %s", sql)
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && searchStr(s, substr)
+}
+
+func searchStr(s, substr string) bool {
+	for i := 0; i <= len(s)-len(substr); i++ {
+		if s[i:i+len(substr)] == substr {
+			return true
+		}
+	}
+	return false
+}

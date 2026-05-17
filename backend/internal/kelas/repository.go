@@ -153,6 +153,7 @@ func (r *Repository) AddSiswa(sekolahID, kelasID, siswaID, tahunAjaranID int64) 
 	_, err := sq.Insert("kelas_siswa").
 		Columns("sekolah_id", "kelas_id", "siswa_id", "tahun_ajaran_id").
 		Values(sekolahID, kelasID, siswaID, tahunAjaranID).
+		Suffix("ON CONFLICT(sekolah_id, siswa_id, kelas_id, tahun_ajaran_id) DO NOTHING").
 		RunWith(r.db).Exec()
 	return err
 }
