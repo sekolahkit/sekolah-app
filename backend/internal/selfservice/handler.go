@@ -1,6 +1,9 @@
 package selfservice
 
 import (
+	"encoding/json"
+	"database/sql"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -10,12 +13,31 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
+type GatewayPaymentResult struct {
+	Provider        string `json:"provider"`
+	OrderID         string `json:"order_id"`
+	PaymentURL      string `json:"payment_url"`
+	PaymentGatewayID string `json:"payment_gateway_id"`
+	Status          string `json:"status"`
+}
+
+type GatewayPaymentInitiator interface {
+	InitiateTransaction(sekolahID, tagihanID, createdBy int64, provider string) (*GatewayPaymentResult, error)
+	HasProvider(provider string) bool
+	AvailableProviders() []string
+}
+
 type Handler struct {
-	service *Service
+	service   *Service
+	gateway   GatewayPaymentInitiator
 }
 
 func NewHandler(service *Service) *Handler {
 	return &Handler{service: service}
+}
+
+func NewHandlerWithGateway(service *Service, gateway GatewayPaymentInitiator) *Handler {
+	return &Handler{service: service, gateway: gateway}
 }
 
 func (h *Handler) ListLinkedSiswa(w http.ResponseWriter, r *http.Request) {
@@ -121,6 +143,90 @@ func (h *Handler) CreatePembayaran(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response.JSON(w, 201, map[string]int64{"id": id})
+}
+
+type GatewayPayRequest struct {
+	Provider string `json:"provider"`
+}
+
+func (h *Handler) InitiateGatewayPayment(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	if user == nil {
+		response.Error(w, 401, "UNAUTHORIZED", "Belum login")
+		return
+	}
+
+	tagihanID, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "ID tagihan tidak valid")
+		return
+	}
+
+	if h.gateway == nil {
+		response.Error(w, 400, "GATEWAY_NOT_AVAILABLE", "Payment gateway tidak tersedia")
+		return
+	}
+
+	var req GatewayPayRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "Request body tidak valid")
+		return
+	}
+
+	if req.Provider != "midtrans" && req.Provider != "xendit" {
+		response.Error(w, 400, "INVALID_PROVIDER", "Provider harus midtrans atau xendit")
+		return
+	}
+
+	if !h.gateway.HasProvider(req.Provider) {
+		response.Error(w, 400, "PROVIDER_NOT_CONFIGURED", "Payment provider belum dikonfigurasi")
+		return
+	}
+
+	ok, siswaID, err := h.service.repo.TagihanBelongsToLinkedSiswa(user.SekolahID, user.UserID, tagihanID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			response.Error(w, 404, "NOT_FOUND", "Tagihan tidak ditemukan")
+			return
+		}
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal memverifikasi akses")
+		return
+	}
+	if !ok {
+		response.Error(w, 404, "NOT_FOUND", "Tagihan tidak ditemukan atau tidak memiliki akses")
+		return
+	}
+	_ = siswaID
+
+	result, err := h.gateway.InitiateTransaction(user.SekolahID, tagihanID, user.UserID, req.Provider)
+	if err != nil {
+		errMsg := err.Error()
+		switch errMsg {
+		case "tagihan sudah lunas":
+			response.Error(w, 409, "TAGIHAN_LUNAS", "Tagihan sudah lunas, tidak dapat membuat transaksi baru")
+		case "payment provider not configured":
+			response.Error(w, 400, "PROVIDER_NOT_CONFIGURED", "Payment provider belum dikonfigurasi")
+		case "tagihan not found":
+			response.Error(w, 404, "NOT_FOUND", "Tagihan tidak ditemukan")
+		default:
+			response.Error(w, 500, "INTERNAL_ERROR", fmt.Sprintf("Gagal membuat transaksi: %s", errMsg))
+		}
+		return
+	}
+
+	response.JSON(w, 200, result)
+}
+
+func (h *Handler) GatewayProviders(w http.ResponseWriter, r *http.Request) {
+	if h.gateway == nil {
+		response.JSON(w, 200, map[string]interface{}{"providers": []string{}})
+		return
+	}
+	providers := h.gateway.AvailableProviders()
+	if providers == nil {
+		providers = []string{}
+	}
+	response.JSON(w, 200, map[string]interface{}{"providers": providers})
 }
 
 func (h *Handler) DashboardSiswa(w http.ResponseWriter, r *http.Request) {

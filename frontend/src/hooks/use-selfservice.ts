@@ -147,6 +147,37 @@ export function useCreatePembayaranSelf() {
   })
 }
 
+export interface GatewayPaymentResult {
+  provider: string
+  order_id: string
+  payment_url: string
+  payment_gateway_id: string
+  status: string
+}
+
+export function useGatewayProviders() {
+  return useQuery({
+    queryKey: ['me', 'payment', 'providers'],
+    queryFn: async () => {
+      const res = await api.get<ApiResponse<{ providers: string[] }>>('/me/payment/providers')
+      return res.data.data.providers
+    },
+  })
+}
+
+export function useInitiateGatewayPayment() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: async (data: { tagihan_id: number; provider: string }) => {
+      const res = await api.post<ApiResponse<GatewayPaymentResult>>(`/me/tagihan/${data.tagihan_id}/pay`, { provider: data.provider })
+      return res.data.data
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['me'] })
+    },
+  })
+}
+
 export function useDashboardSiswa() {
   return useQuery({
     queryKey: ['dashboard', 'siswa'],

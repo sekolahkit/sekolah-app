@@ -186,6 +186,8 @@ Setelah password diubah, semua refresh token user di-revoke dan user harus login
 | GET | `/me/siswa/:id/tagihan` | Tagihan siswa yang terhubung | Siswa, Orangtua |
 | GET | `/me/siswa/:id/pembayaran` | Riwayat pembayaran siswa yang terhubung | Siswa, Orangtua |
 | POST | `/me/pembayaran` | Submit pembayaran manual (hanya tagihan terhubung) | Siswa, Orangtua |
+| POST | `/me/tagihan/:id/pay` | Inisiasi pembayaran gateway untuk tagihan terhubung | Siswa, Orangtua |
+| GET | `/me/payment/providers` | List provider gateway yang tersedia | Siswa, Orangtua |
 
 #### Submit Pembayaran (POST /me/pembayaran)
 
@@ -284,6 +286,7 @@ Pembayaran yang disubmit berstatus `pending` dan harus diverifikasi oleh admin/o
 | PUT | `/tagihan/:id` | Update tagihan | Admin, Operator |
 | DELETE | `/tagihan/:id` | Hapus tagihan | Admin |
 | POST | `/tagihan/bulk` | Buat tagihan massal | Admin, Operator |
+| POST | `/tagihan/:id/pay` | Inisiasi pembayaran gateway | Admin, Operator |
 
 ### Pembayaran
 
@@ -300,8 +303,42 @@ Pembayaran yang disubmit berstatus `pending` dan harus diverifikasi oleh admin/o
 
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
+| GET | `/payment/providers` | List provider gateway yang tersedia | Auth |
 | POST | `/payment/callback/midtrans` | Callback Midtrans (validasi SHA-512 signature) | Public |
 | POST | `/payment/callback/xendit` | Callback Xendit (validasi x-callback-token header) | Public |
+
+#### Inisiasi Transaksi Gateway
+
+**Admin/Operator:** `POST /api/v1/tagihan/:id/pay`
+**Siswa/Orangtua:** `POST /api/v1/me/tagihan/:id/pay`
+
+**Request:**
+```json
+{
+    "provider": "midtrans"
+}
+```
+
+**Response (200):**
+```json
+{
+    "data": {
+        "provider": "midtrans",
+        "order_id": "123",
+        "payment_url": "https://app.sandbox.midtrans.com/snap/v2/vtweb/123",
+        "payment_gateway_id": "123",
+        "status": "pending"
+    }
+}
+```
+
+**Error Responses:**
+- `409 TAGIHAN_LUNAS` — Tagihan sudah lunas
+- `400 PROVIDER_NOT_CONFIGURED` — Provider belum dikonfigurasi
+- `400 INVALID_PROVIDER` — Provider tidak valid (harus `midtrans` atau `xendit`)
+- `404 NOT_FOUND` — Tagihan tidak ditemukan atau tidak memiliki akses
+
+**Idempotency:** Jika sudah ada transaksi pending untuk tagihan+provider yang sama, response akan mengembalikan data transaksi yang sudah ada tanpa membuat transaksi baru.
 
 > **Catatan:** Endpoint callback tidak memerlukan auth cookie, tapi divalidasi via signature/token dari masing-masing provider. Callback bersifat idempotent — request dengan `payment_gateway_id` yang sudah diproses akan return 200 tanpa side effect.
 

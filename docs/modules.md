@@ -158,14 +158,23 @@ Catatan:
 ### Alur Payment Gateway
 ```
 1. Admin/Operator buat tagihan
-2. Siswa/Orangtua pilih bayar via gateway
-3. Redirect ke halaman payment gateway
-4. Siswa/Orangtua selesaikan pembayaran
-5. Gateway kirim callback ke backend
-6. Backend validasi signature callback
-7. Backend cek idempotency (payment_gateway_id sudah ada? → skip, return 200)
-8. Backend cek overpay invariant dalam DB transaction
-9. Simpan pembayaran + update status tagihan (atomic)
+2. Siswa/Orangtua pilih "Bayar Online" atau admin/operator inisiasi via API
+3. Backend validasi:
+   a. Tagihan ada dan milik sekolah yang sama (tenant isolation)
+   b. Tagihan belum lunas
+   c. Provider tersedia dan dikonfigurasi
+   d. Siswa/Orangtua: tagihan milik siswa yang terhubung (pengguna_siswa)
+4. Backend cek idempotency: jika sudah ada transaksi pending untuk tagihan+provider → return yang sudah ada
+5. Backend generate order_id dan panggil gateway.CreateTransaction()
+6. Simpan gateway_transaksi (status: pending)
+7. Return payment_url ke frontend
+8. User buka payment_url di browser
+9. User selesaikan pembayaran di gateway
+10. Gateway kirim callback ke backend
+11. Backend validasi signature callback
+12. Backend cek idempotency (payment_gateway_id sudah ada? → skip, return 200)
+13. Backend cek overpay invariant dalam DB transaction
+14. Simpan pembayaran + update status tagihan + update gateway_transaksi status (atomic)
 ```
 
 ### Payment Invariants
@@ -174,8 +183,10 @@ Catatan:
 |-----------|------------|
 | No overpay | `SUM(pembayaran.jumlah WHERE status='verified' AND tagihan_id=X) <= tagihan.nominal` |
 | Idempotency | Callback dengan `(provider, payment_gateway_id)` yang sudah ada → skip, return 200 OK |
-| Atomic update | Insert pembayaran + update status tagihan dalam satu DB transaction |
+| Initiation idempotency | Transaksi gateway dengan `(tagihan_id, provider, status='pending')` yang sudah ada → return yang sudah ada |
+| Atomic update | Insert pembayaran + update status tagihan + update gateway_transaksi status dalam satu DB transaction |
 | Signature validation | Setiap callback harus divalidasi signature sebelum diproses |
+| No premature verification | Tidak ada pembayaran yang dibuat verified/lunas saat inisiasi — hanya setelah callback valid |
 
 ### Signature Validation per Gateway
 

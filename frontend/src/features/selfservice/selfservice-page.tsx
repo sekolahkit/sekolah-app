@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { useLinkedSiswa, useTagihanSelf, usePembayaranSelf, useCreatePembayaranSelf } from '@/hooks/use-selfservice'
+import { useLinkedSiswa, useTagihanSelf, usePembayaranSelf, useCreatePembayaranSelf, useGatewayProviders, useInitiateGatewayPayment } from '@/hooks/use-selfservice'
 import { useRekeningAktif } from '@/hooks/use-pembayaran'
 import { cn } from '@/lib/utils'
-import { User, FileText, CreditCard, X } from 'lucide-react'
+import { User, FileText, CreditCard, X, ExternalLink, Loader2 } from 'lucide-react'
 import type { LinkedSiswa, TagihanSelf } from '@/hooks/use-selfservice'
 
 export function SelfServicePage() {
@@ -86,6 +86,7 @@ export function SelfServicePage() {
 function TagihanSection({ siswaId }: { siswaId: number }) {
   const { data, isLoading } = useTagihanSelf(siswaId)
   const [payTagihan, setPayTagihan] = useState<TagihanSelf | null>(null)
+  const [gatewayTagihan, setGatewayTagihan] = useState<TagihanSelf | null>(null)
 
   if (isLoading) return <div className="mt-4 text-muted-foreground">Memuat tagihan...</div>
   if (!data?.length) return <div className="mt-4 text-muted-foreground">Tidak ada tagihan.</div>
@@ -112,9 +113,14 @@ function TagihanSection({ siswaId }: { siswaId: number }) {
                 <td className="px-4 py-3"><TagihanStatusBadge status={t.status} /></td>
                 <td className="px-4 py-3 text-right">
                   {t.status !== 'lunas' && (
-                    <button onClick={() => setPayTagihan(t)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
-                      Bayar
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button onClick={() => setPayTagihan(t)} className="rounded-md border border-border px-2 py-1 text-xs hover:bg-muted">
+                        Bayar
+                      </button>
+                      <button onClick={() => setGatewayTagihan(t)} className="rounded-md bg-primary px-2 py-1 text-xs text-primary-foreground hover:opacity-90">
+                        Bayar Online
+                      </button>
+                    </div>
                   )}
                 </td>
               </tr>
@@ -125,6 +131,9 @@ function TagihanSection({ siswaId }: { siswaId: number }) {
 
       {payTagihan && (
         <PaymentDialog tagihan={payTagihan} onClose={() => setPayTagihan(null)} />
+      )}
+      {gatewayTagihan && (
+        <GatewayPaymentDialog tagihan={gatewayTagihan} onClose={() => setGatewayTagihan(null)} />
       )}
     </div>
   )
@@ -247,6 +256,130 @@ function PaymentDialog({ tagihan, onClose }: { tagihan: TagihanSelf; onClose: ()
             </button>
           </div>
         </form>
+      </div>
+    </div>
+  )
+}
+
+function GatewayPaymentDialog({ tagihan, onClose }: { tagihan: TagihanSelf; onClose: () => void }) {
+  const { data: providers, isLoading: providersLoading } = useGatewayProviders()
+  const initiateMutation = useInitiateGatewayPayment()
+  const [selectedProvider, setSelectedProvider] = useState('')
+  const [error, setError] = useState('')
+  const [result, setResult] = useState<{ payment_url: string; provider: string } | null>(null)
+
+  async function handleInitiate() {
+    if (!selectedProvider) {
+      setError('Pilih provider pembayaran')
+      return
+    }
+    setError('')
+    try {
+      const res = await initiateMutation.mutateAsync({
+        tagihan_id: tagihan.id,
+        provider: selectedProvider,
+      })
+      setResult(res)
+    } catch (err: unknown) {
+      const apiErr = err as { response?: { data?: { error?: { code?: string; message?: string } } } }
+      const code = apiErr?.response?.data?.error?.code
+      const msg = apiErr?.response?.data?.error?.message
+      if (code === 'TAGIHAN_LUNAS') {
+        setError('Tagihan sudah lunas')
+      } else if (code === 'PROVIDER_NOT_CONFIGURED') {
+        setError('Payment provider belum dikonfigurasi')
+      } else {
+        setError(msg || 'Gagal membuat transaksi pembayaran')
+      }
+    }
+  }
+
+  if (result) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-card-foreground">Pembayaran Online</h2>
+            <button onClick={onClose} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+          </div>
+          <div className="mt-4 space-y-3">
+            <p className="text-sm text-muted-foreground">
+              Transaksi berhasil dibuat. Klik tombol di bawah untuk membuka halaman pembayaran.
+            </p>
+            <div className="rounded-lg border border-border p-3 text-sm">
+              <p><span className="text-muted-foreground">Provider:</span> {result.provider}</p>
+              <p><span className="text-muted-foreground">Status:</span> Menunggu pembayaran</p>
+            </div>
+            <a
+              href={result.payment_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              <ExternalLink className="h-4 w-4" />
+              Buka Halaman Pembayaran
+            </a>
+          </div>
+          <div className="flex justify-end pt-3">
+            <button onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Tutup</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-foreground/20 p-4">
+      <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <h2 className="text-lg font-semibold text-card-foreground">Bayar Online</h2>
+          <button onClick={onClose} className="rounded p-1 hover:bg-muted"><X className="h-5 w-5" /></button>
+        </div>
+        <p className="mt-2 text-sm text-muted-foreground">{tagihan.kategori_nama} — {formatCurrency(tagihan.nominal)}</p>
+
+        <div className="mt-4 space-y-3">
+          {providersLoading ? (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Memuat provider...
+            </div>
+          ) : !providers?.length ? (
+            <p className="text-sm text-muted-foreground">Tidak ada payment provider yang tersedia.</p>
+          ) : (
+            <div className="space-y-2">
+              <label className="text-xs font-medium text-muted-foreground">Pilih Provider</label>
+              <div className="flex gap-2">
+                {providers.map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => setSelectedProvider(p)}
+                    className={cn(
+                      'rounded-md border px-4 py-2 text-sm font-medium transition-colors',
+                      selectedProvider === p
+                        ? 'border-primary bg-primary/10 text-primary'
+                        : 'border-border hover:bg-muted'
+                    )}
+                  >
+                    {p === 'midtrans' ? 'Midtrans' : 'Xendit'}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {error && <p className="text-sm text-destructive">{error}</p>}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button type="button" onClick={onClose} className="rounded-md border border-border px-4 py-2 text-sm hover:bg-muted">Batal</button>
+            <button
+              onClick={handleInitiate}
+              disabled={!providers?.length || initiateMutation.isPending}
+              className="rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:opacity-90 disabled:opacity-50"
+            >
+              {initiateMutation.isPending ? 'Memproses...' : 'Bayar Online'}
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   )

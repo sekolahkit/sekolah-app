@@ -29,11 +29,13 @@ Database menggunakan SQLite. Setiap instalasi memiliki satu file database `sekol
 └─────────────┘     └──────────────┘     └─────────────┘
        │
        │
-       ▼
-┌─────────────┐     ┌──────────────┐     ┌─────────────┐
-│ ppdb_        │────<│ ppdb_berkas  │     │ ppdb_ujian  │
-│ pendaftaran  │     │              │     │             │
-└─────────────┘     └──────────────┘     └─────────────┘
+       ├──────────────────────────────────────┐
+       │                                      │
+       ▼                                      ▼
+┌─────────────┐                        ┌──────────────┐
+│ ppdb_        │                        │ gateway_     │
+│ pendaftaran  │                        │ transaksi    │
+└─────────────┘                        └──────────────┘
        │
        │
        ▼
@@ -338,6 +340,35 @@ CREATE TABLE pembayaran (
 
 > **Catatan SQLite:** `UNIQUE(provider, payment_gateway_id)` dengan NULL memungkinkan banyak pembayaran manual (provider=NULL, payment_gateway_id=NULL) karena SQLite menganggap NULL != NULL di unique constraint. Ini sesuai kebutuhan — hanya pembayaran via gateway yang perlu idempotency.
 
+### gateway_transaksi
+Tabel tracking transaksi payment gateway yang diinisiasi. Digunakan untuk idempotency inisiasi dan tracking status transaksi.
+
+```sql
+CREATE TABLE gateway_transaksi (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sekolah_id INTEGER NOT NULL,
+    tagihan_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,                -- midtrans, xendit
+    order_id TEXT NOT NULL,                -- order ID yang dikirim ke gateway (= tagihan ID)
+    payment_gateway_id TEXT,               -- ID dari gateway (diisi setelah callback)
+    payment_url TEXT NOT NULL,             -- URL pembayaran dari gateway
+    amount INTEGER NOT NULL,               -- nominal tagihan
+    status TEXT NOT NULL DEFAULT 'pending', -- pending, paid, failed, expired, cancelled
+    expires_at DATETIME,                   -- waktu kadaluarsa transaksi
+    created_by INTEGER NOT NULL,           -- pengguna ID yang inisiasi
+    created_at DATETIME DEFAULT (datetime('now')),
+    updated_at DATETIME DEFAULT (datetime('now')),
+    FOREIGN KEY (sekolah_id) REFERENCES sekolah(id),
+    FOREIGN KEY (tagihan_id) REFERENCES tagihan(id),
+    FOREIGN KEY (created_by) REFERENCES pengguna(id),
+    UNIQUE(tagihan_id, provider, status)
+);
+```
+
+> **Idempotency:** Constraint `UNIQUE(tagihan_id, provider, status)` memastikan hanya ada satu transaksi pending per tagihan+provider. Request inisiasi berulang akan mengembalikan transaksi yang sudah ada.
+
+> **Catatan SQLite:** Sama seperti `pembayaran`, constraint ini memungkinkan banyak transaksi dengan status berbeda (paid, failed, expired) untuk tagihan+provider yang sama, karena SQLite menganggap NULL != NULL dan status yang berbeda tidak melanggar UNIQUE.
+
 ### ppdb_pendaftaran
 Tabel pendaftar PPDB.
 
@@ -490,6 +521,15 @@ CREATE TABLE schema_migrations (
 | `verified` | Sudah diverifikasi |
 | `rejected` | Ditolak |
 
+### Gateway Transaksi Status
+| Status | Keterangan |
+|--------|------------|
+| `pending` | Menunggu pembayaran di gateway |
+| `paid` | Pembayaran berhasil (via callback) |
+| `failed` | Pembayaran gagal |
+| `expired` | Transaksi kadaluarsa |
+| `cancelled` | Dibatalkan |
+
 ### PPDB Status
 | Status | Keterangan |
 |--------|------------|
@@ -602,4 +642,8 @@ CREATE INDEX idx_ppdb_konfigurasi_ranking_sekolah_id ON ppdb_konfigurasi_ranking
 -- ppdb_pendaftaran (ranking)
 CREATE INDEX idx_ppdb_pendaftaran_ranking ON ppdb_pendaftaran(ranking);
 CREATE INDEX idx_ppdb_pendaftaran_skor ON ppdb_pendaftaran(skor);
+
+-- gateway_transaksi
+CREATE INDEX idx_gateway_transaksi_order_id ON gateway_transaksi(order_id);
+CREATE INDEX idx_gateway_transaksi_sekolah ON gateway_transaksi(sekolah_id);
 ```
