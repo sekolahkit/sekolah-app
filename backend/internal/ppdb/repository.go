@@ -344,3 +344,46 @@ func (r *Repository) UpsertKonfigurasiRanking(k *KonfigurasiRanking) error {
 		RunWith(r.db).Exec()
 	return err
 }
+
+func (r *Repository) ListAllPendaftaran(sekolahID int64, params ListParams) ([]Pendaftaran, error) {
+	query := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama_lengkap",
+		"COALESCE(nik,'')", "COALESCE(tempat_lahir,'')", "COALESCE(tanggal_lahir,'')",
+		"jenis_kelamin", "COALESCE(agama,'')", "COALESCE(alamat,'')",
+		"COALESCE(asal_sekolah,'')", "COALESCE(no_hp,'')", "COALESCE(email,'')",
+		"COALESCE(nama_ortu,'')", "COALESCE(no_hp_ortu,'')", "COALESCE(pekerjaan_ortu,'')",
+		"COALESCE(foto,'')", "status", "COALESCE(skor,0)", "COALESCE(ranking,0)",
+		"COALESCE(latitude,0)", "COALESCE(longitude,0)", "COALESCE(catatan,'')",
+		"created_at", "updated_at").
+		From("ppdb_pendaftaran").
+		Where(sq.Eq{"sekolah_id": sekolahID})
+
+	if params.Status != "" {
+		query = query.Where(sq.Eq{"status": params.Status})
+	}
+	if params.TahunAjaranID > 0 {
+		query = query.Where(sq.Eq{"tahun_ajaran_id": params.TahunAjaranID})
+	}
+
+	query = query.OrderBy("created_at DESC")
+
+	rows, err := query.RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Pendaftaran
+	for rows.Next() {
+		var p Pendaftaran
+		err := rows.Scan(&p.ID, &p.SekolahID, &p.TahunAjaranID, &p.NamaLengkap,
+			&p.NIK, &p.TempatLahir, &p.TanggalLahir, &p.JenisKelamin, &p.Agama,
+			&p.Alamat, &p.AsalSekolah, &p.NoHP, &p.Email, &p.NamaOrtu, &p.NoHPOrtu,
+			&p.PekerjaanOrtu, &p.Foto, &p.Status, &p.Skor, &p.Ranking,
+			&p.Latitude, &p.Longitude, &p.Catatan, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, nil
+}

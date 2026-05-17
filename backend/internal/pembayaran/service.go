@@ -342,3 +342,11 @@ func (s *Service) RejectPembayaran(sekolahID, id int64) error {
 	}
 	return s.repo.RejectPembayaran(sekolahID, id)
 }
+
+func (s *Service) ExportTagihan(sekolahID int64, params TagihanListParams) ([]ExportTagihanRow, error) {
+	return s.repo.ExportTagihan(sekolahID, params)
+}
+
+func (s *Service) GetKwitansiData(sekolahID, pembayaranID int64) (*KwitansiData, error) {
+	return s.repo.GetKwitansiData(sekolahID, pembayaranID)
+}

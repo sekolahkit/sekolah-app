@@ -3,7 +3,7 @@ import { useAuth } from '@/hooks/use-auth-hook'
 import { useTagihanList, useCreateTagihan, useBulkCreateTagihan, usePembayaranList, useVerifyPembayaran, useRejectPembayaran, useCreatePembayaran, useRekeningAktif } from '@/hooks/use-pembayaran'
 import { useTahunAjaranList, useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { cn } from '@/lib/utils'
-import { Plus, Check, X, CreditCard, Search, Users, Download, Loader2 } from 'lucide-react'
+import { Plus, Check, X, CreditCard, Search, Users, Download, Loader2, Receipt } from 'lucide-react'
 import { SiswaPicker, SiswaMultiPicker } from '@/components/ui/siswa-picker'
 import { downloadExport } from '@/lib/export'
 import type { Tagihan, Pembayaran, Rekening, Siswa } from '@/types'
@@ -201,8 +201,11 @@ function VerifikasiSection() {
                 <td className="px-4 py-3 text-foreground font-mono">{formatCurrency(p.jumlah)}</td>
                 <td className="px-4 py-3 text-foreground">{p.metode}</td>
                 <td className="px-4 py-3 text-foreground">{p.tanggal?.split('T')[0]}</td>
-                <td className="px-4 py-3 text-right">
+                  <td className="px-4 py-3 text-right">
                   <div className="flex items-center justify-end gap-1">
+                    <a href={`/api/v1/pembayaran/${p.id}/kwitansi`} target="_blank" rel="noopener noreferrer" className="rounded bg-muted p-1.5 text-muted-foreground hover:bg-muted/80" title="Kwitansi">
+                      <Receipt className="h-4 w-4" />
+                    </a>
                     <button onClick={() => handleVerify(p.id)} disabled={verifyMutation.isPending} className="rounded bg-primary/10 p-1.5 text-primary hover:bg-primary/20" title="Verifikasi">
                       <Check className="h-4 w-4" />
                     </button>

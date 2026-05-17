@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/Sekolahkit/sekolah-app/pkg/export"
 	"github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/Sekolahkit/sekolah-app/pkg/response"
 	"github.com/Sekolahkit/sekolah-app/pkg/validator"
@@ -124,8 +125,41 @@ func (h *Handler) Import(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
-	_ = r.URL.Query().Get("tahun_ajaran_id")
-	response.JSON(w, 200, map[string]string{"message": "Export endpoint - coming soon"})
+	user := middleware.GetUser(r.Context())
+	search := r.URL.Query().Get("search")
+
+	list, err := h.service.ExportData(user.SekolahID, search)
+	if err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal mengambil data siswa")
+		return
+	}
+
+	cols := []export.Column{
+		{Header: "NIS", Width: 12},
+		{Header: "Nama", Width: 25},
+		{Header: "Jenis Kelamin", Width: 14},
+		{Header: "Tempat Lahir", Width: 16},
+		{Header: "Tanggal Lahir", Width: 14},
+		{Header: "Agama", Width: 10},
+		{Header: "Alamat", Width: 30},
+		{Header: "No HP", Width: 14},
+		{Header: "Email", Width: 22},
+		{Header: "Nama Ortu", Width: 22},
+		{Header: "No HP Ortu", Width: 14},
+		{Header: "Status", Width: 10},
+	}
+
+	var rows [][]string
+	for _, s := range list {
+		rows = append(rows, []string{
+			s.NIS, s.Nama, s.JenisKelamin, s.TempatLahir, s.TanggalLahir,
+			s.Agama, s.Alamat, s.NoHP, s.Email, s.NamaOrtu, s.NoHPOrtu, s.Status,
+		})
+	}
+
+	if err := export.WriteXLSX(w, "data-siswa.xlsx", cols, rows); err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal membuat file export")
+	}
 }
 
 func parseListParams(r *http.Request) ListParams {

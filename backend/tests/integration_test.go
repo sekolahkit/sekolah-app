@@ -131,6 +131,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 
 			r.Route("/siswa", func(r chi.Router) {
 				r.Get("/", siswaHandler.List)
+				r.Get("/export", siswaHandler.Export)
 				r.Get("/{id}", siswaHandler.GetByID)
 				r.Post("/", siswaHandler.Create)
 				r.Put("/{id}", siswaHandler.Update)
@@ -175,7 +176,9 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 
 			r.Route("/pembayaran", func(r chi.Router) {
 				r.Get("/", pembayaranHandler.ListPembayaran)
+				r.Get("/export", pembayaranHandler.Export)
 				r.Get("/{id}", pembayaranHandler.GetPembayaranByID)
+				r.Get("/{id}/kwitansi", pembayaranHandler.Kwitansi)
 				r.Post("/", pembayaranHandler.CreatePembayaran)
 				r.Put("/{id}/verify", pembayaranHandler.VerifyPembayaran)
 				r.Put("/{id}/reject", pembayaranHandler.RejectPembayaran)
@@ -193,6 +196,7 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 			r.Use(mw.Auth(testJWTSecret))
 			r.Use(mw.RequireRole("admin", "operator"))
 			r.Get("/ppdb/pendaftar", ppdbHandler.ListPendaftar)
+			r.Get("/ppdb/export", ppdbHandler.Export)
 			r.Get("/ppdb/pendaftar/{id}", ppdbHandler.GetPendaftar)
 			r.Put("/ppdb/pendaftar/{id}", ppdbHandler.UpdateStatus)
 			r.Get("/ppdb/pendaftar/{id}/berkas", ppdbHandler.ListBerkas)
@@ -230,8 +234,11 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 			r.Use(mw.RequireRole("admin", "operator"))
 			r.Get("/dashboard/operator", laporanHandler.DashboardOperator)
 			r.Get("/laporan/pembayaran", laporanHandler.RekapPembayaran)
+			r.Get("/laporan/pembayaran/export", laporanHandler.ExportPembayaran)
 			r.Get("/laporan/ppdb", laporanHandler.RekapPPDB)
+			r.Get("/laporan/ppdb/export", laporanHandler.ExportPPDB)
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
+			r.Get("/laporan/siswa/export", laporanHandler.ExportSiswa)
 		})
 	})
 
@@ -700,5 +707,328 @@ func TestLaporan_CrossSchoolIsolation(t *testing.T) {
 	data := result["data"].(map[string]interface{})
 	if int(data["total"].(float64)) != 0 {
 		t.Errorf("school2 should see 0 siswa from school1, got %v", data["total"])
+	}
+}
+
+func TestExport_Siswa_ReturnsXLSX(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "002", "nama": "Budi", "jenis_kelamin": "L",
+	}, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/siswa/export", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("expected XLSX content type, got %s", ct)
+	}
+	cd := resp.Header.Get("Content-Disposition")
+	if cd == "" {
+		t.Error("missing Content-Disposition header")
+	}
+}
+
+func TestExport_Siswa_IsTenantScoped(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "school1", "admin@s1.id", "password123")
+
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO sekolah (nama, kode) VALUES ('School 2', 'school2')")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role) VALUES (2, 'admin@s2.id', ?, 'Admin2', 'admin')", hash)
+
+	cookies1 := doLogin(t, server, "school1", "admin@s1.id", "password123")
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Siswa School1", "jenis_kelamin": "L",
+	}, cookies1)
+
+	cookies2 := doLogin(t, server, "school2", "admin@s2.id", "password123")
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/siswa/export", nil)
+	for _, c := range cookies2 {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestExport_Tagihan_ReturnsXLSX(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/pembayaran/export", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("expected XLSX content type, got %s", ct)
+	}
+}
+
+func TestExport_Tagihan_RespectsFilters(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2023/2024', 0)")
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies)
+
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 2, "nominal": 300000, "jatuh_tempo": "2025-08-15",
+	}, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/pembayaran/export?tahun_ajaran_id=1", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestKwitansi_ReturnsHTML(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/pembayaran", map[string]interface{}{
+		"tagihan_id": 1, "siswa_id": 1, "jumlah": 500000, "tanggal": "2024-08-10", "metode": "cash",
+	}, cookies)
+	authRequest("PUT", server.URL+"/api/v1/pembayaran/1/verify", nil, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/pembayaran/1/kwitansi", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "text/html; charset=utf-8" {
+		t.Errorf("expected HTML content type, got %s", ct)
+	}
+}
+
+func TestKwitansi_CrossSchoolRejected(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "school1", "admin@s1.id", "password123")
+
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO sekolah (nama, kode) VALUES ('School 2', 'school2')")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role) VALUES (2, 'admin@s2.id', ?, 'Admin2', 'admin')", hash)
+
+	cookies1 := doLogin(t, server, "school1", "admin@s1.id", "password123")
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies1)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies1)
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies1)
+	authRequest("POST", server.URL+"/api/v1/pembayaran", map[string]interface{}{
+		"tagihan_id": 1, "siswa_id": 1, "jumlah": 500000, "tanggal": "2024-08-10", "metode": "cash",
+	}, cookies1)
+	authRequest("PUT", server.URL+"/api/v1/pembayaran/1/verify", nil, cookies1)
+
+	cookies2 := doLogin(t, server, "school2", "admin@s2.id", "password123")
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/pembayaran/1/kwitansi", nil)
+	for _, c := range cookies2 {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 404 {
+		t.Errorf("expected 404 for cross-school kwitansi, got %d", resp.StatusCode)
+	}
+}
+
+func TestExport_PPDB_ReturnsXLSX(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/ppdb/daftar", map[string]interface{}{
+		"tahun_ajaran_id": 1, "nama_lengkap": "Calon Siswa", "jenis_kelamin": "L",
+	}, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/ppdb/export?tahun_ajaran_id=1", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("expected XLSX content type, got %s", ct)
+	}
+}
+
+func TestExport_LaporanPembayaran_ReturnsXLSX(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+
+	authRequest("POST", server.URL+"/api/v1/siswa", map[string]interface{}{
+		"nis": "001", "nama": "Andi", "jenis_kelamin": "L",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/kategori-pembayaran", map[string]interface{}{
+		"nama": "SPP",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/tagihan", map[string]interface{}{
+		"siswa_id": 1, "kategori_id": 1, "tahun_ajaran_id": 1, "nominal": 500000, "jatuh_tempo": "2024-08-15",
+	}, cookies)
+	authRequest("POST", server.URL+"/api/v1/pembayaran", map[string]interface{}{
+		"tagihan_id": 1, "siswa_id": 1, "jumlah": 500000, "tanggal": "2024-08-10", "metode": "cash",
+	}, cookies)
+	authRequest("PUT", server.URL+"/api/v1/pembayaran/1/verify", nil, cookies)
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/laporan/pembayaran/export?tanggal_mulai=2024-01-01&tanggal_selesai=2025-12-31", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("expected XLSX content type, got %s", ct)
+	}
+}
+
+func TestExport_LaporanSiswa_ReturnsXLSX(t *testing.T) {
+	server, _ := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	cookies := doLogin(t, server, "test1", "admin@test1.id", "password123")
+
+	req, _ := http.NewRequest("GET", server.URL+"/api/v1/laporan/siswa/export", nil)
+	for _, c := range cookies {
+		req.AddCookie(c)
+	}
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		t.Fatalf("expected 200, got %d", resp.StatusCode)
+	}
+	ct := resp.Header.Get("Content-Type")
+	if ct != "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" {
+		t.Errorf("expected XLSX content type, got %s", ct)
 	}
 }

@@ -23,3 +23,15 @@ func (s *Service) GetRekapPPDB(sekolahID int64, tahunAjaranID int64) (*RekapPPDB
 func (s *Service) GetRekapSiswa(sekolahID int64, tahunAjaranID int64) (*RekapSiswa, error) {
 	return s.repo.GetRekapSiswa(sekolahID, tahunAjaranID)
 }
+
+func (s *Service) ExportPembayaran(sekolahID int64, tanggalMulai, tanggalSelesai string, tahunAjaranID int64) ([]ExportPembayaranRow, error) {
+	return s.repo.ExportPembayaran(sekolahID, tanggalMulai, tanggalSelesai, tahunAjaranID)
+}
+
+func (s *Service) ExportPPDB(sekolahID int64, tahunAjaranID int64) ([]ExportPPDBRow, error) {
+	return s.repo.ExportPPDB(sekolahID, tahunAjaranID)
+}
+
+func (s *Service) ExportSiswa(sekolahID int64, tahunAjaranID int64) ([]ExportSiswaRow, error) {
+	return s.repo.ExportSiswa(sekolahID, tahunAjaranID)
+}

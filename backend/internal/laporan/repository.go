@@ -227,3 +227,117 @@ func (r *Repository) GetRekapSiswa(sekolahID int64, tahunAjaranID int64) (*Rekap
 
 	return rekap, nil
 }
+
+type ExportPembayaranRow struct {
+	Tanggal   string
+	SiswaNama string
+	Kategori  string
+	Metode    string
+	Jumlah    float64
+	Status    string
+}
+
+func (r *Repository) ExportPembayaran(sekolahID int64, tanggalMulai, tanggalSelesai string, tahunAjaranID int64) ([]ExportPembayaranRow, error) {
+	query := `SELECT p.tanggal, COALESCE(s.nama,''), COALESCE(kp.nama,''), p.metode, p.jumlah, p.status
+		FROM pembayaran p
+		JOIN tagihan t ON t.id = p.tagihan_id
+		JOIN siswa s ON s.id = p.siswa_id
+		LEFT JOIN kategori_pembayaran kp ON kp.id = t.kategori_id
+		WHERE t.sekolah_id = ? AND p.tanggal >= ? AND p.tanggal <= ?`
+	args := []interface{}{sekolahID, tanggalMulai, tanggalSelesai}
+	if tahunAjaranID > 0 {
+		query += " AND t.tahun_ajaran_id = ?"
+		args = append(args, tahunAjaranID)
+	}
+	query += " ORDER BY p.tanggal DESC, s.nama ASC"
+
+	rows, err := r.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ExportPembayaranRow
+	for rows.Next() {
+		var e ExportPembayaranRow
+		if err := rows.Scan(&e.Tanggal, &e.SiswaNama, &e.Kategori, &e.Metode, &e.Jumlah, &e.Status); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, nil
+}
+
+type ExportPPDBRow struct {
+	NamaLengkap  string
+	NIK          string
+	JenisKelamin string
+	AsalSekolah  string
+	Status       string
+	Skor         float64
+	Ranking      int
+}
+
+func (r *Repository) ExportPPDB(sekolahID int64, tahunAjaranID int64) ([]ExportPPDBRow, error) {
+	query := sq.Select("nama_lengkap", "COALESCE(nik,'')", "jenis_kelamin",
+		"COALESCE(asal_sekolah,'')", "status", "COALESCE(skor,0)", "COALESCE(ranking,0)").
+		From("ppdb_pendaftaran").
+		Where(sq.Eq{"sekolah_id": sekolahID, "tahun_ajaran_id": tahunAjaranID}).
+		OrderBy("ranking ASC, nama_lengkap ASC")
+
+	rows, err := query.RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ExportPPDBRow
+	for rows.Next() {
+		var e ExportPPDBRow
+		if err := rows.Scan(&e.NamaLengkap, &e.NIK, &e.JenisKelamin, &e.AsalSekolah, &e.Status, &e.Skor, &e.Ranking); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, nil
+}
+
+type ExportSiswaRow struct {
+	NIS          string
+	Nama         string
+	JenisKelamin string
+	TempatLahir  string
+	TanggalLahir string
+	Agama        string
+	Alamat       string
+	Status       string
+}
+
+func (r *Repository) ExportSiswa(sekolahID int64, tahunAjaranID int64) ([]ExportSiswaRow, error) {
+	query := sq.Select("nis", "nama", "jenis_kelamin",
+		"COALESCE(tempat_lahir,'')", "COALESCE(tanggal_lahir,'')", "COALESCE(agama,'')",
+		"COALESCE(alamat,'')", "status").
+		From("siswa").
+		Where(sq.Eq{"sekolah_id": sekolahID})
+	if tahunAjaranID > 0 {
+		query = query.Where(sq.Eq{"tahun_ajaran_masuk": tahunAjaranID})
+	}
+	query = query.OrderBy("nama ASC")
+
+	rows, err := query.RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []ExportSiswaRow
+	for rows.Next() {
+		var e ExportSiswaRow
+		if err := rows.Scan(&e.NIS, &e.Nama, &e.JenisKelamin, &e.TempatLahir,
+			&e.TanggalLahir, &e.Agama, &e.Alamat, &e.Status); err != nil {
+			return nil, err
+		}
+		list = append(list, e)
+	}
+	return list, nil
+}

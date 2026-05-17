@@ -1,9 +1,11 @@
 package pembayaran
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
+	"github.com/Sekolahkit/sekolah-app/pkg/export"
 	"github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/Sekolahkit/sekolah-app/pkg/response"
 	"github.com/Sekolahkit/sekolah-app/pkg/validator"
@@ -327,6 +329,137 @@ func (h *Handler) RejectPembayaran(w http.ResponseWriter, r *http.Request) {
 
 	response.JSON(w, 200, map[string]string{"message": "Pembayaran berhasil ditolak"})
 }
+
+func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	params := parseTagihanListParams(r)
+
+	list, err := h.service.ExportTagihan(user.SekolahID, params)
+	if err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal mengambil data tagihan")
+		return
+	}
+
+	cols := []export.Column{
+		{Header: "NIS", Width: 12},
+		{Header: "Nama Siswa", Width: 25},
+		{Header: "Kategori", Width: 18},
+		{Header: "Tahun Ajaran", Width: 16},
+		{Header: "Semester", Width: 10},
+		{Header: "Nominal", Width: 16},
+		{Header: "Jatuh Tempo", Width: 14},
+		{Header: "Status", Width: 12},
+	}
+
+	var rows [][]string
+	for _, t := range list {
+		rows = append(rows, []string{
+			t.SiswaNIS, t.SiswaNama, t.KategoriNama, t.TahunAjaranNama,
+			t.Semester, fmt.Sprintf("%.0f", t.Nominal), t.JatuhTempo, t.Status,
+		})
+	}
+
+	if err := export.WriteXLSX(w, "data-tagihan.xlsx", cols, rows); err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal membuat file export")
+	}
+}
+
+func (h *Handler) Kwitansi(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, 400, "INVALID_ID", "ID tidak valid")
+		return
+	}
+
+	data, err := h.service.GetKwitansiData(user.SekolahID, id)
+	if err != nil {
+		response.Error(w, 404, "NOT_FOUND", "Pembayaran tidak ditemukan")
+		return
+	}
+
+	statusLabel := map[string]string{
+		"verified": "Terverifikasi",
+		"pending":  "Menunggu Verifikasi",
+		"rejected": "Ditolak",
+	}
+	metodeLabel := map[string]string{
+		"transfer": "Transfer Bank",
+		"cash":     "Tunai",
+		"midtrans":  "Midtrans",
+		"xendit":   "Xendit",
+	}
+
+	catatanHTML := ""
+	if data.Catatan != "" {
+		catatanHTML = fmt.Sprintf(`<div class="row"><span class="label">Catatan</span><span class="value">%s</span></div>`, data.Catatan)
+	}
+
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprintf(w, kwitansiHTML,
+		data.SekolahNama,
+		data.SiswaNama,
+		data.SiswaNIS,
+		data.KategoriNama,
+		data.TahunAjaranNama,
+		formatRupiah(data.NominalTagihan),
+		formatRupiah(data.JumlahBayar),
+		data.TanggalBayar,
+		metodeLabel[data.MetodeBayar],
+		statusLabel[data.StatusBayar],
+		data.VerifiedAt,
+		catatanHTML,
+	)
+}
+
+func formatRupiah(v float64) string {
+	s := fmt.Sprintf("%.0f", v)
+	n := len(s)
+	if n <= 3 {
+		return "Rp " + s
+	}
+	result := ""
+	for i, c := range s {
+		if i > 0 && (n-i)%3 == 0 {
+			result += "."
+		}
+		result += string(c)
+	}
+	return "Rp " + result
+}
+
+const kwitansiHTML = `<!DOCTYPE html>
+<html><head><meta charset="utf-8"><title>Kwitansi Pembayaran</title>
+<style>
+  @media print { body { margin: 0; } @page { margin: 2cm; } }
+  body { font-family: 'Segoe UI', Arial, sans-serif; max-width: 600px; margin: 40px auto; color: #333; }
+  .header { text-align: center; border-bottom: 3px double #333; padding-bottom: 16px; margin-bottom: 20px; }
+  .header h1 { margin: 0; font-size: 20px; text-transform: uppercase; }
+  .header p { margin: 4px 0 0; font-size: 13px; color: #666; }
+  .row { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #eee; }
+  .label { color: #666; font-size: 14px; min-width: 160px; }
+  .value { font-size: 14px; font-weight: 500; text-align: right; }
+  .amount { font-size: 24px; font-weight: 700; text-align: center; margin: 24px 0; padding: 16px; background: #f8f9fa; border: 1px solid #dee2e6; border-radius: 8px; }
+  .amount small { display: block; font-size: 12px; color: #666; font-weight: 400; margin-bottom: 4px; }
+  .footer { text-align: center; margin-top: 40px; font-size: 12px; color: #999; }
+</style></head><body>
+<div class="header">
+  <h1>%s</h1>
+  <p>Kwitansi Pembayaran</p>
+</div>
+<div class="row"><span class="label">Siswa</span><span class="value">%s (%s)</span></div>
+<div class="row"><span class="label">Kategori</span><span class="value">%s</span></div>
+<div class="row"><span class="label">Tahun Ajaran</span><span class="value">%s</span></div>
+<div class="row"><span class="label">Nominal Tagihan</span><span class="value">%s</span></div>
+<div class="amount"><small>Jumlah Dibayar</small>%s</div>
+<div class="row"><span class="label">Tanggal</span><span class="value">%s</span></div>
+<div class="row"><span class="label">Metode</span><span class="value">%s</span></div>
+<div class="row"><span class="label">Status</span><span class="value">%s</span></div>
+<div class="row"><span class="label">Diverifikasi</span><span class="value">%s</span></div>
+%s
+<div class="footer">Dicetak dari sistem sekolah</div>
+<script>window.onload=function(){window.print()}</script>
+</body></html>`
 
 func parseTagihanListParams(r *http.Request) TagihanListParams {
 	page, _ := strconv.Atoi(r.URL.Query().Get("page"))

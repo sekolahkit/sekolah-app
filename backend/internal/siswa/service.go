@@ -147,3 +147,7 @@ func (s *Service) Delete(sekolahID, id int64) error {
 	}
 	return s.repo.Delete(sekolahID, id)
 }
+
+func (s *Service) ExportData(sekolahID int64, search string) ([]Siswa, error) {
+	return s.repo.ListAll(sekolahID, search)
+}
