@@ -354,14 +354,79 @@ Pembayaran yang disubmit berstatus `pending` dan harus diverifikasi oleh admin/o
 
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
-| GET | `/ppdb/pendaftar` | List pendaftar | Admin, Operator |
+| GET | `/ppdb/pendaftar` | List pendaftar (support filter `daftar_ulang`) | Admin, Operator |
 | GET | `/ppdb/pendaftar/:id` | Detail pendaftar | Admin, Operator |
 | PUT | `/ppdb/pendaftar/:id` | Update status | Admin, Operator |
 | GET | `/ppdb/pendaftar/:id/berkas` | List berkas | Admin, Operator |
 | PUT | `/ppdb/berkas/:id` | Verifikasi berkas | Admin, Operator |
 | POST | `/ppdb/ujian` | Input nilai ujian | Admin, Operator |
-| POST | `/ppdb/pengumuman` | Publish pengumuman | Admin |
+| POST | `/ppdb/pengumuman` | Publish pengumuman (manual, per pendaftar) | Admin, Operator |
 | GET | `/ppdb/export` | Export ke Excel | Admin, Operator |
+| GET | `/ppdb/konfigurasi-ranking` | Ambil konfigurasi ranking | Admin, Operator |
+| POST | `/ppdb/konfigurasi-ranking` | Simpan konfigurasi ranking | Admin, Operator |
+| POST | `/ppdb/ranking/run` | Jalankan ranking | Admin, Operator |
+| POST | `/ppdb/ranking/publish` | Publish hasil ranking sebagai pengumuman | Admin, Operator |
+| POST | `/ppdb/pendaftar/:id/daftar-ulang` | Konfirmasi daftar ulang | Admin, Operator |
+| GET | `/ppdb/pendaftar/:id/daftar-ulang/status` | Status daftar ulang | Admin, Operator |
+
+#### Run Ranking (POST /ppdb/ranking/run)
+
+**Request:**
+```json
+{
+    "tahun_ajaran_id": 1,
+    "dry_run": false
+}
+```
+
+**Response (200) — dry_run=true (preview):**
+```json
+{
+    "data": {
+        "ranked": [
+            {"id": 1, "nama_lengkap": "Alice", "skor": 90.5, "ranking": 1, "status": "diterima"},
+            {"id": 2, "nama_lengkap": "Bob", "skor": 85.0, "ranking": 2, "status": "cadangan"},
+            {"id": 3, "nama_lengkap": "Charlie", "skor": 70.0, "ranking": 3, "status": "tidak_diterima"}
+        ],
+        "total_pendaftar": 3,
+        "diterima_count": 1,
+        "cadangan_count": 1,
+        "tidak_diterima_count": 1,
+        "metode": "nilai_ujian",
+        "kuota": 1,
+        "cadangan": 1,
+        "dry_run": true
+    }
+}
+```
+
+**Idempotency:** Re-running ranking replaces previous results atomically. The previous ranking is reset before new results are applied.
+
+#### Publish Ranking (POST /ppdb/ranking/publish)
+
+**Request:**
+```json
+{
+    "tahun_ajaran_id": 1,
+    "keterangan": "Hasil seleksi PPDB 2024/2025"
+}
+```
+
+**Response (200):**
+```json
+{
+    "data": {
+        "message": "Pengumuman berhasil dipublish",
+        "published_count": 50
+    }
+}
+```
+
+Hanya bisa dijalankan setelah ranking dijalankan. Membuat record `ppdb_pengumuman` untuk setiap pendaftar yang memiliki ranking.
+
+#### Daftar Ulang (POST /ppdb/pendaftar/:id/daftar-ulang)
+
+Hanya pendaftar dengan status `diterima` yang dapat daftar ulang. Mengubah status menjadi `daftar_ulang` dan mengisi `daftar_ulang_at`.
 
 ### Notifikasi
 

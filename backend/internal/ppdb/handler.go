@@ -257,6 +257,7 @@ func parseListParams(r *http.Request) ListParams {
 		Limit:         limit,
 		Status:        r.URL.Query().Get("status"),
 		TahunAjaranID: tahunAjaranID,
+		DaftarUlang:   r.URL.Query().Get("daftar_ulang"),
 	}
 }
 
@@ -306,4 +307,76 @@ func (h *Handler) Export(w http.ResponseWriter, r *http.Request) {
 	if err := export.WriteXLSX(w, "data-ppdb.xlsx", cols, rows); err != nil {
 		response.Error(w, 500, "INTERNAL_ERROR", "Gagal membuat file export")
 	}
+}
+
+func (h *Handler) RunRanking(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+
+	var req RunRankingRequest
+	if err := validator.DecodeJSON(r, &req); err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "Request body tidak valid")
+		return
+	}
+
+	result, err := h.service.RunRanking(user.SekolahID, user.UserID, req)
+	if err != nil {
+		response.Error(w, 400, "RANKING_ERROR", err.Error())
+		return
+	}
+
+	response.JSON(w, 200, result)
+}
+
+func (h *Handler) PublishRanking(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+
+	var req PublishRankingRequest
+	if err := validator.DecodeJSON(r, &req); err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "Request body tidak valid")
+		return
+	}
+
+	count, err := h.service.PublishRanking(user.SekolahID, req)
+	if err != nil {
+		response.Error(w, 400, "PUBLISH_ERROR", err.Error())
+		return
+	}
+
+	response.JSON(w, 200, map[string]interface{}{
+		"message":          "Pengumuman berhasil dipublish",
+		"published_count":  count,
+	})
+}
+
+func (h *Handler) DaftarUlang(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, 400, "INVALID_ID", "ID tidak valid")
+		return
+	}
+
+	if err := h.service.DaftarUlang(user.SekolahID, id); err != nil {
+		response.Error(w, 400, "DAFTAR_ULANG_ERROR", err.Error())
+		return
+	}
+
+	response.JSON(w, 200, map[string]string{"message": "Daftar ulang berhasil"})
+}
+
+func (h *Handler) GetDaftarUlangStatus(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		response.Error(w, 400, "INVALID_ID", "ID tidak valid")
+		return
+	}
+
+	status, err := h.service.GetDaftarUlangStatus(user.SekolahID, id)
+	if err != nil {
+		response.Error(w, 404, "NOT_FOUND", err.Error())
+		return
+	}
+
+	response.JSON(w, 200, status)
 }

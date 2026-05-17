@@ -88,6 +88,35 @@ type ListParams struct {
 	Limit         int
 	Status        string
 	TahunAjaranID int64
+	DaftarUlang   string
+}
+
+type RankingLog struct {
+	ID                 int64  `json:"id"`
+	SekolahID          int64  `json:"sekolah_id"`
+	TahunAjaranID      int64  `json:"tahun_ajaran_id"`
+	Metode             string `json:"metode"`
+	BobotJSON          string `json:"bobot_json"`
+	Kuota              int    `json:"kuota"`
+	Cadangan           int    `json:"cadangan"`
+	TotalPendaftar     int    `json:"total_pendaftar"`
+	DiterimaCount      int    `json:"diterima_count"`
+	CadanganCount      int    `json:"cadangan_count"`
+	TidakDiterimaCount int    `json:"tidak_diterima_count"`
+	DryRun             bool   `json:"dry_run"`
+	ExecutedBy         int64  `json:"executed_by"`
+	ExecutedAt         string `json:"executed_at"`
+}
+
+type RankedPendaftaran struct {
+	ID           int64   `json:"id"`
+	NamaLengkap  string  `json:"nama_lengkap"`
+	Skor         float64 `json:"skor"`
+	Ranking      int     `json:"ranking"`
+	Status       string  `json:"status"`
+	TanggalLahir string  `json:"tanggal_lahir"`
+	Latitude     float64 `json:"latitude"`
+	Longitude    float64 `json:"longitude"`
 }
 
 func (r *Repository) ListPendaftaran(sekolahID int64, params ListParams) ([]Pendaftaran, int, error) {
@@ -111,6 +140,10 @@ func (r *Repository) ListPendaftaran(sekolahID int64, params ListParams) ([]Pend
 	if params.TahunAjaranID > 0 {
 		query = query.Where(sq.Eq{"tahun_ajaran_id": params.TahunAjaranID})
 		countQuery = countQuery.Where(sq.Eq{"tahun_ajaran_id": params.TahunAjaranID})
+	}
+	if params.DaftarUlang != "" {
+		query = query.Where(sq.Eq{"daftar_ulang_status": params.DaftarUlang})
+		countQuery = countQuery.Where(sq.Eq{"daftar_ulang_status": params.DaftarUlang})
 	}
 
 	var total int
@@ -386,4 +419,124 @@ func (r *Repository) ListAllPendaftaran(sekolahID int64, params ListParams) ([]P
 		list = append(list, p)
 	}
 	return list, nil
+}
+
+func (r *Repository) GetUjianAvgByPendaftaran(pendaftaranID int64) (float64, error) {
+	var avg sql.NullFloat64
+	err := sq.Select("COALESCE(AVG(nilai), 0)").
+		From("ppdb_ujian").
+		Where(sq.Eq{"pendaftaran_id": pendaftaranID}).
+		RunWith(r.db).QueryRow().Scan(&avg)
+	if err != nil {
+		return 0, err
+	}
+	return avg.Float64, nil
+}
+
+func (r *Repository) GetAllPendaftaranForRanking(sekolahID, tahunAjaranID int64) ([]Pendaftaran, error) {
+	rows, err := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama_lengkap",
+		"COALESCE(nik,'')", "COALESCE(tempat_lahir,'')", "COALESCE(tanggal_lahir,'')",
+		"jenis_kelamin", "COALESCE(agama,'')", "COALESCE(alamat,'')",
+		"COALESCE(asal_sekolah,'')", "COALESCE(no_hp,'')", "COALESCE(email,'')",
+		"COALESCE(nama_ortu,'')", "COALESCE(no_hp_ortu,'')", "COALESCE(pekerjaan_ortu,'')",
+		"COALESCE(foto,'')", "status", "COALESCE(skor,0)", "COALESCE(ranking,0)",
+		"COALESCE(latitude,0)", "COALESCE(longitude,0)", "COALESCE(catatan,'')",
+		"created_at", "updated_at").
+		From("ppdb_pendaftaran").
+		Where(sq.Eq{"sekolah_id": sekolahID, "tahun_ajaran_id": tahunAjaranID}).
+		RunWith(r.db).Query()
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var list []Pendaftaran
+	for rows.Next() {
+		var p Pendaftaran
+		err := rows.Scan(&p.ID, &p.SekolahID, &p.TahunAjaranID, &p.NamaLengkap,
+			&p.NIK, &p.TempatLahir, &p.TanggalLahir, &p.JenisKelamin, &p.Agama,
+			&p.Alamat, &p.AsalSekolah, &p.NoHP, &p.Email, &p.NamaOrtu, &p.NoHPOrtu,
+			&p.PekerjaanOrtu, &p.Foto, &p.Status, &p.Skor, &p.Ranking,
+			&p.Latitude, &p.Longitude, &p.Catatan, &p.CreatedAt, &p.UpdatedAt)
+		if err != nil {
+			return nil, err
+		}
+		list = append(list, p)
+	}
+	return list, nil
+}
+
+func (r *Repository) UpdatePendaftaranSkorRankingStatus(sekolahID, id int64, skor float64, ranking int, status string) error {
+	_, err := sq.Update("ppdb_pendaftaran").
+		Set("skor", skor).
+		Set("ranking", ranking).
+		Set("status", status).
+		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
+		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
+		RunWith(r.db).Exec()
+	return err
+}
+
+func (r *Repository) ResetRankingForTahunAjaran(sekolahID, tahunAjaranID int64) error {
+	_, err := sq.Update("ppdb_pendaftaran").
+		Set("skor", 0).
+		Set("ranking", 0).
+		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
+		Where(sq.Eq{"sekolah_id": sekolahID, "tahun_ajaran_id": tahunAjaranID}).
+		RunWith(r.db).Exec()
+	return err
+}
+
+func (r *Repository) CreateRankingLog(log *RankingLog) (int64, error) {
+	dryRun := 0
+	if log.DryRun {
+		dryRun = 1
+	}
+	result, err := sq.Insert("ppdb_ranking_log").
+		Columns("sekolah_id", "tahun_ajaran_id", "metode", "bobot_json", "kuota", "cadangan",
+			"total_pendaftar", "diterima_count", "cadangan_count", "tidak_diterima_count",
+			"dry_run", "executed_by").
+		Values(log.SekolahID, log.TahunAjaranID, log.Metode, log.BobotJSON, log.Kuota, log.Cadangan,
+			log.TotalPendaftar, log.DiterimaCount, log.CadanganCount, log.TidakDiterimaCount,
+			dryRun, log.ExecutedBy).
+		RunWith(r.db).Exec()
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
+}
+
+func (r *Repository) UpdateDaftarUlangStatus(sekolahID, id int64, status string) error {
+	var waktu interface{}
+	if status == "sudah" {
+		waktu = sq.Expr("datetime('now')")
+	}
+	_, err := sq.Update("ppdb_pendaftaran").
+		Set("daftar_ulang_status", status).
+		Set("daftar_ulang_at", waktu).
+		Set("status", "daftar_ulang").
+		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
+		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
+		RunWith(r.db).Exec()
+	return err
+}
+
+func (r *Repository) CreateBulkPengumuman(pengumuman []Pengumuman) error {
+	tx, err := r.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, p := range pengumuman {
+		_, err := sq.Insert("ppdb_pengumuman").
+			Columns("pendaftaran_id", "status", "ranking", "keterangan", "tanggal_pengumuman").
+			Values(p.PendaftaranID, p.Status, p.Ranking, p.Keterangan, p.TanggalPengumuman).
+			RunWith(tx).Exec()
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
 }
