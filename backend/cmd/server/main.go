@@ -266,6 +266,14 @@ func main() {
 		prefService := notifikasi.NewPreferensiService(prefRepo)
 		prefHandler := notifikasi.NewPreferensiHandler(prefService)
 
+		tgInviteRepo := notifikasi.NewTelegramInviteRepository(db)
+		tgService := notifikasi.NewTelegramService(tgInviteRepo, prefRepo, notifikasi.TelegramConfig{
+			BotToken:      secrets.TelegramBotToken,
+			BotUsername:   secrets.TelegramBotUsername,
+			WebhookSecret: secrets.TelegramWebhookSecret,
+		})
+		tgHandler := notifikasi.NewTelegramHandler(tgService)
+
 		registry := notifikasi.NewRegistry()
 		if cfg.Notifikasi.WhatsApp {
 			registry.Register(notifikasi.NewWhatsAppProvider())
@@ -287,6 +295,8 @@ func main() {
 			WithPreferensi(prefRepo)
 		go worker.Start(workerCtx)
 
+		notifikasi.RegisterTelegramWebhook(r, tgHandler)
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Use(mw.RequireRole("admin"))
@@ -296,6 +306,7 @@ func main() {
 			r.Get("/notifikasi/queue", notifHandler.QueueStatus)
 			r.Post("/notifikasi/{id}/retry", notifHandler.Retry)
 			notifikasi.RegisterPreferensiRoutes(r, prefHandler)
+			notifikasi.RegisterTelegramRoutes(r, tgHandler)
 		})
 
 		laporanRepo := laporan.NewRepository(db)

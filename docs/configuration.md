@@ -89,6 +89,8 @@ SMTP_FROM=noreply@sekolah.com  # opsional, fallback ke SMTP_USER
 
 # Telegram Bot (opsional)
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_BOT_USERNAME=YourBotUsername
+TELEGRAM_WEBHOOK_SECRET=random-secret-string
 
 # Payment Gateway (opsional)
 MIDTRANS_SERVER_KEY=
@@ -206,6 +208,23 @@ TELEGRAM_BOT_TOKEN=123456789:ABCdefGHIjklMNOpqrsTUVwxyz
 1. Chat bot yang sudah dibuat
 2. Dapatkan chat ID dari `https://api.telegram.org/bot<TOKEN>/getUpdates`
 3. Masukkan chat ID di pengaturan aplikasi
+
+### Opt-in Flow
+
+Telegram bot tidak bisa memulai chat. Penerima harus:
+1. Admin buat link undangan dari halaman Preferensi
+2. Kirim link ke penerima (orang tua/siswa)
+3. Penerima klik link → bot Telegram terbuka → kirim /start
+4. Bot mengikat chat_id ke preferensi → consent otomatis jadi `granted`
+
+Setup webhook:
+```
+POST https://your-domain.com/api/v1/telegram/webhook
+```
+Set webhook secret di Telegram Bot API:
+```
+https://api.telegram.org/bot<TOKEN>/setWebhook?url=<WEBHOOK_URL>&secret_token=<SECRET>
+```
 
 ---
 

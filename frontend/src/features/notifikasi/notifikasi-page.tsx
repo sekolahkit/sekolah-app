@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNotifikasiList, useQueueStats, useTestSend, useRetryNotifikasi } from '@/hooks/use-notifikasi'
-import { usePreferensiList, useUpsertPreferensi } from '@/hooks/use-notifikasi-preferensi'
+import { usePreferensiList, useUpsertPreferensi, useGenerateTelegramInvite } from '@/hooks/use-notifikasi-preferensi'
 import { cn } from '@/lib/utils'
 import { Send, AlertCircle, CheckCircle, Clock, X, RotateCcw, Shield } from 'lucide-react'
 import type { Notifikasi } from '@/hooks/use-notifikasi'
@@ -198,6 +198,8 @@ function PreferensiTab() {
 
 function PreferensiRow({ preferensi: p }: { preferensi: NotifikasiPreferensi }) {
   const upsert = useUpsertPreferensi()
+  const genInvite = useGenerateTelegramInvite()
+  const [inviteLink, setInviteLink] = useState('')
 
   function toggleEnabled() {
     upsert.mutate({
@@ -222,7 +224,21 @@ function PreferensiRow({ preferensi: p }: { preferensi: NotifikasiPreferensi }) 
     })
   }
 
+  async function handleGenerateInvite() {
+    try {
+      const result = await genInvite.mutateAsync(p.id)
+      setInviteLink(result.invite_link)
+    } catch {
+      setInviteLink('')
+    }
+  }
+
+  function copyLink() {
+    if (inviteLink) navigator.clipboard.writeText(inviteLink)
+  }
+
   return (
+    <>
     <tr className="border-b border-border last:border-0 hover:bg-muted/30">
       <td className="px-4 py-3"><ChannelBadge channel={p.channel} /></td>
       <td className="px-4 py-3 text-foreground font-mono text-xs">{p.destination}</td>
@@ -237,11 +253,31 @@ function PreferensiRow({ preferensi: p }: { preferensi: NotifikasiPreferensi }) 
       </td>
       <td className="px-4 py-3 text-xs text-muted-foreground">{p.consent_source}</td>
       <td className="px-4 py-3 text-right">
-        <button onClick={toggleConsent} disabled={upsert.isPending} className="rounded bg-muted p-1.5 hover:bg-accent" title={p.consent_status === 'granted' ? 'Revoke' : 'Grant'}>
-          <Shield className="h-3.5 w-3.5 text-muted-foreground" />
-        </button>
+        <div className="flex items-center justify-end gap-1">
+          {p.channel === 'telegram' && (
+            <button onClick={handleGenerateInvite} disabled={genInvite.isPending} className="rounded bg-muted p-1.5 hover:bg-accent" title="Buat Link Undangan Telegram">
+              <Send className="h-3.5 w-3.5 text-muted-foreground" />
+            </button>
+          )}
+          <button onClick={toggleConsent} disabled={upsert.isPending} className="rounded bg-muted p-1.5 hover:bg-accent" title={p.consent_status === 'granted' ? 'Revoke' : 'Grant'}>
+            <Shield className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </div>
       </td>
     </tr>
+    {inviteLink && (
+      <tr>
+        <td colSpan={7} className="px-4 py-2 bg-muted/20">
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">Undangan:</span>
+            <code className="flex-1 rounded bg-muted px-2 py-1 text-xs text-foreground break-all">{inviteLink}</code>
+            <button onClick={copyLink} className="rounded bg-muted px-2 py-1 text-xs hover:bg-accent">Salin</button>
+            <button onClick={() => setInviteLink('')} className="rounded bg-muted px-2 py-1 text-xs hover:bg-accent">Tutup</button>
+          </div>
+        </td>
+      </tr>
+    )}
+    </>
   )
 }
 
