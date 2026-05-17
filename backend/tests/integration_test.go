@@ -20,6 +20,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
+	"github.com/Sekolahkit/sekolah-app/internal/upload"
 	mw "github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/cors"
@@ -240,6 +241,19 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
 			r.Get("/laporan/siswa/export", laporanHandler.ExportSiswa)
 		})
+
+		uploadTmpDir := t.TempDir()
+		uploadService := upload.NewService(uploadTmpDir, 5, []string{"image/jpeg", "image/png", "application/pdf"})
+		uploadHandler := upload.NewHandler(uploadService, testJWTSecret)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Post("/upload", uploadHandler.Upload)
+			r.Post("/upload/signed", uploadHandler.GenerateSignedURL)
+			r.Get("/upload/*", uploadHandler.Download)
+		})
+
+		r.Get("/upload/signed/{token}", uploadHandler.ServeSignedURL)
 	})
 
 	server := httptest.NewServer(r)

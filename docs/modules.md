@@ -11,6 +11,7 @@
 | [PPDB](#ppdb) | Wajib | Pendaftaran siswa baru |
 | [Notifikasi](#notifikasi) | Opsional | WhatsApp, Telegram, Email |
 | [Laporan](#laporan) | Wajib | Dashboard & export |
+| [Upload](#upload--file-management) | Wajib | File upload & signed URL |
 | [Backup](#backup) | Wajib | Backup & restore |
 
 ---
@@ -454,6 +455,45 @@ Semua laporan bisa di-export ke Excel:
 - Kwitansi pembayaran
 - Surat keterangan
 - Daftar siswa
+
+---
+
+## Upload & File Management
+
+### Fitur
+- Upload file (JPEG, PNG, PDF, max 5 MB)
+- Kategori: bukti_bayar, berkas_ppdb, foto_siswa, foto_ppdb, general
+- Download via auth handler (tenant-scoped)
+- Signed URL untuk akses sementara tanpa auth
+
+### Struktur File
+```
+./uploads/
+  {sekolah_id}/
+    bukti_bayar/
+    berkas_ppdb/
+    foto_siswa/
+    foto_ppdb/
+    general/
+```
+
+### Signed URL
+Untuk keperluan notifikasi (WhatsApp/Telegram/Email) atau sharing sementara:
+
+```go
+// Generate signed URL (dari backend/internal code)
+result, err := upload.SignPath(secret, sekolahID, filePath, 5*time.Minute)
+// result.URL → "/api/v1/upload/signed/eyJzaWQi..."
+
+// Atau via API
+POST /api/v1/upload/signed
+{ "path": "1/bukti_bayar/abc.pdf", "ttl_seconds": 300 }
+```
+
+- Default TTL: 5 menit
+- Max TTL: 15 menit
+- Token: HMAC-SHA256 signed, tamper-proof
+- Token reusable sampai expired (tidak single-use)
 
 ---
 

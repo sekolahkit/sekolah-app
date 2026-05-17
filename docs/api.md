@@ -284,13 +284,47 @@ GET /api/v1/siswa?page=1&limit=20&sort=nama&search=andi
 | Method | Endpoint | Keterangan | Role |
 |--------|----------|------------|------|
 | POST | `/upload` | Upload file | Auth |
+| POST | `/upload/signed` | Generate signed URL untuk file | Auth |
 | GET | `/upload/:path` | Download file (cek auth + relasi) | Auth |
-| GET | `/upload/signed/:token` | Download file via signed URL (TTL 5-15 menit) | Public |
+| GET | `/upload/signed/:token` | Download file via signed URL | Public |
+
+#### Generate Signed URL
+
+```
+POST /api/v1/upload/signed
+Content-Type: application/json
+Cookie: access_token=...
+
+{
+  "path": "1/bukti_bayar/abc123.pdf",
+  "ttl_seconds": 300
+}
+```
+
+Response (200):
+```json
+{
+  "data": {
+    "token": "eyJzaWQiOjEsInAiOiIxL2J1a3RpX2JheWFyL2FiYzEyMy5wZGYiLCJleHAiOjE3...",
+    "url": "/api/v1/upload/signed/eyJzaWQiOjEsInAiOiIxL2J1a3RpX2JheWFyL2FiYzEyMy5wZGYiLCJleHAiOjE3...",
+    "expires_at": "2025-01-15T10:30:00Z"
+  }
+}
+```
+
+#### Download via Signed URL
+
+```
+GET /api/v1/upload/signed/:token
+```
+
+Tidak perlu cookie/auth. Token sudah mengandung otentikasi.
 
 > **File Access Control:**
-> - Semua file privat (bukti bayar, KK, akta, berkas PPDB, foto siswa, dokumen pembayaran) hanya bisa diakses lewat endpoint auth handler.
-> - Handler cek: (1) user authenticated, (2) role diizinkan, (3) user punya relasi ke data terkait (via tenant scoping + pengguna_siswa).
-> - **Signed URL** digunakan untuk kasus khusus: link sementara di notifikasi WhatsApp/Telegram/Email, preview file, atau sharing terbatas. TTL pendek (5-15 menit), single-use opsional.
+> - Semua file privat (bukti bayar, KK, akta, berkas PPDB, foto siswa, dokumen pembayaran) hanya bisa diakses lewat endpoint auth handler atau signed URL.
+> - Auth handler cek: (1) user authenticated, (2) user punya akses ke file (via tenant scoping sekolah_id).
+> - **Signed URL** digunakan untuk kasus khusus: link sementara di notifikasi WhatsApp/Telegram/Email, preview file, atau sharing terbatas. TTL pendek (5-15 menit), token reusable sampai expired.
+> - Signed URL divalidasi: HMAC-SHA256 signature, expiry timestamp, sekolah_id scoping, path traversal protection.
 > - Public assets (logo sekolah) disimpan terpisah di folder `/public/` dan boleh di-serve langsung tanpa auth.
 
 ## HTTP Status Codes

@@ -349,17 +349,30 @@ Semua file yang diupload dibagi dua kategori:
 Untuk kasus di mana auth cookie tidak tersedia (link di notifikasi WhatsApp/Telegram/Email):
 
 ```
-1. Backend generate signed URL: /api/v1/upload/signed/:token
-2. Token berisi: file_path + expires_at + HMAC signature
-3. TTL pendek: 5-15 menit
-4. Tidak perlu auth cookie untuk akses
-5. Setelah expired → 403
+1. Backend generate signed URL: POST /api/v1/upload/signed
+   - Request: { "path": "1/bukti_bayar/abc.pdf", "ttl_seconds": 300 }
+   - Response: { "token": "...", "url": "/api/v1/upload/signed/...", "expires_at": "..." }
+2. Token berisi: JSON payload (sekolah_id, path, expires_at) + HMAC-SHA256 signature
+3. Format token: base64url(payload).base64url(hmac)
+4. TTL: default 5 menit, max 15 menit (dipotong otomatis jika lebih)
+5. Akses: GET /api/v1/upload/signed/:token — tidak perlu auth cookie
+6. Validasi: HMAC signature, expiry timestamp, sekolah_id sesuai path, path traversal ditolak
+7. Setelah expired → 403
+8. Token reusable sampai expired (tidak single-use)
 ```
 
 Signed URL digunakan untuk:
 - Link download di pesan WhatsApp/Telegram
 - Preview file di email notifikasi
 - Sharing terbatas ke pihak ketiga
+
+**Keamanan Signed URL:**
+- Token ditandatangani dengan HMAC-SHA256 menggunakan JWT secret yang sama
+- Payload berisi `sekolah_id` yang harus sesuai dengan path (mencegah cross-school access)
+- Path traversal (`..`) dicegah di level validasi token
+- Token yang diubah (tampered) akan gagal verifikasi signature
+- Token yang sudah expired akan ditolak dengan 403
+- Tidak ada data file yang bisa diakses tanpa token yang valid
 
 #### Deployment
 

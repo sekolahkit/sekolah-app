@@ -1,8 +1,10 @@
 package upload
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Sekolahkit/sekolah-app/pkg/middleware"
 	"github.com/Sekolahkit/sekolah-app/pkg/response"
@@ -11,10 +13,11 @@ import (
 
 type Handler struct {
 	service *Service
+	secret  string
 }
 
-func NewHandler(service *Service) *Handler {
-	return &Handler{service: service}
+func NewHandler(service *Service, secret string) *Handler {
+	return &Handler{service: service, secret: secret}
 }
 
 func (h *Handler) Upload(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +86,76 @@ func (h *Handler) Download(w http.ResponseWriter, r *http.Request) {
 	}
 
 	fullPath, err := h.service.GetFilePath(path)
+	if err != nil {
+		response.Error(w, 404, "NOT_FOUND", "File tidak ditemukan")
+		return
+	}
+
+	http.ServeFile(w, r, fullPath)
+}
+
+type generateSignedRequest struct {
+	Path      string `json:"path"`
+	TTLSeconds int   `json:"ttl_seconds"`
+}
+
+func (h *Handler) GenerateSignedURL(w http.ResponseWriter, r *http.Request) {
+	user := middleware.GetUser(r.Context())
+	if user == nil {
+		response.Error(w, 401, "UNAUTHORIZED", "Belum login")
+		return
+	}
+
+	var req generateSignedRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		response.Error(w, 400, "INVALID_REQUEST", "Request body tidak valid")
+		return
+	}
+
+	if req.Path == "" {
+		response.Error(w, 400, "INVALID_REQUEST", "Path tidak boleh kosong")
+		return
+	}
+
+	if err := ValidatePath(req.Path); err != nil {
+		response.Error(w, 403, "FORBIDDEN", "Path tidak valid")
+		return
+	}
+
+	if err := h.service.ValidateAccess(req.Path, user.SekolahID); err != nil {
+		response.Error(w, 403, "FORBIDDEN", "Tidak punya akses ke file ini")
+		return
+	}
+
+	if _, err := h.service.GetFilePath(req.Path); err != nil {
+		response.Error(w, 404, "NOT_FOUND", "File tidak ditemukan")
+		return
+	}
+
+	ttl := time.Duration(req.TTLSeconds) * time.Second
+	result, err := SignPath(h.secret, user.SekolahID, req.Path, ttl)
+	if err != nil {
+		response.Error(w, 500, "INTERNAL_ERROR", "Gagal membuat signed URL")
+		return
+	}
+
+	response.JSON(w, 200, result)
+}
+
+func (h *Handler) ServeSignedURL(w http.ResponseWriter, r *http.Request) {
+	token := chi.URLParam(r, "token")
+	if token == "" {
+		response.Error(w, 400, "INVALID_REQUEST", "Token tidak valid")
+		return
+	}
+
+	payload, err := ValidateSignedToken(h.secret, token)
+	if err != nil {
+		response.Error(w, 403, "FORBIDDEN", err.Error())
+		return
+	}
+
+	fullPath, err := h.service.GetFilePath(payload.Path)
 	if err != nil {
 		response.Error(w, 404, "NOT_FOUND", "File tidak ditemukan")
 		return

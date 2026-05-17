@@ -364,13 +364,16 @@ func main() {
 		})
 
 		uploadService := upload.NewService("./uploads", cfg.Upload.MaxSize, cfg.Upload.AllowedTypes)
-		uploadHandler := upload.NewHandler(uploadService)
+		uploadHandler := upload.NewHandler(uploadService, secrets.JWTSecret)
 
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 			r.Post("/upload", uploadHandler.Upload)
+			r.Post("/upload/signed", uploadHandler.GenerateSignedURL)
 			r.Get("/upload/*", uploadHandler.Download)
 		})
+
+		r.Get("/upload/signed/{token}", uploadHandler.ServeSignedURL)
 	})
 
 	if frontend.HasBuild() {
