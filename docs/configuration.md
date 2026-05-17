@@ -33,6 +33,13 @@ notifikasi:
   telegram: false                     # Aktifkan Telegram
   email: true                         # Aktifkan Email
 
+# Rate Limiting WhatsApp
+# (opsional, nilai default di bawah)
+# whatsapp_send_interval: 4s         # Jeda antar pesan
+# whatsapp_recipient_cooldown: 30s   # Jeda per penerima
+# whatsapp_burst_limit: 20           # Maks pesan per window
+# whatsapp_burst_window: 5m          # Window burst
+
 # Upload
 upload:
   max_size: 5                         # Max upload (MB)
@@ -189,6 +196,35 @@ INFO  Server listening on :8080
 - Database session tersimpan di `data/whatsapp.db`
 
 ---
+
+## Konfigurasi WhatsApp
+
+### Setup whatsmeow
+
+1. Pastikan `notifikasi.whatsapp: true` di config.yaml
+2. Jalankan aplikasi — WhatsApp client akan membuat session SQLite di `data/whatsapp.db`
+3. Buka halaman Notifikasi > status WhatsApp
+4. Klik "Hubungkan" — QR code akan muncul
+5. Scan QR dengan WhatsApp (Settings > Linked Devices > Link a Device)
+6. Tunggu hingga status "Terhubung"
+
+### Catatan Operasional
+
+- WhatsApp memerlukan scan QR untuk login pertama
+- Session disimpan di `data/whatsapp.db` — jangan hapus file ini
+- Rate limit default: 1 pesan per 4 detik, 30 detik per penerima, 20 pesan per 5 menit
+- Rate-limited items di-reschedule, bukan dianggap gagal
+- Pesan hanya terkirim jika consent `granted` dan preference `enabled`
+- Jangan gunakan untuk spam/bulk blasting
+
+### Rate Limit Environment Variables
+
+```env
+WHATSAPP_SEND_INTERVAL_SECONDS=4
+WHATSAPP_RECIPIENT_COOLDOWN_SECONDS=30
+WHATSAPP_BURST_LIMIT=20
+WHATSAPP_BURST_WINDOW_SECONDS=300
+```
 
 ## Konfigurasi Telegram
 

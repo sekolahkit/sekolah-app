@@ -275,9 +275,6 @@ func main() {
 		tgHandler := notifikasi.NewTelegramHandler(tgService)
 
 		registry := notifikasi.NewRegistry()
-		if cfg.Notifikasi.WhatsApp {
-			registry.Register(notifikasi.NewWhatsAppProvider())
-		}
 		if cfg.Notifikasi.Email {
 			registry.Register(notifikasi.NewEmailProvider(notifikasi.EmailConfig{
 				Host:     secrets.SMTPHost,
@@ -290,6 +287,22 @@ func main() {
 		if cfg.Notifikasi.Telegram {
 			registry.Register(notifikasi.NewTelegramProvider(secrets.TelegramBotToken))
 		}
+
+		var waClient *notifikasi.WhatsAppClient
+		if cfg.Notifikasi.WhatsApp {
+			waCfg := notifikasi.WhatsAppConfig{Enabled: true, DataPath: "./data/whatsapp.db"}
+			client, err := notifikasi.NewWhatsAppClient(waCfg)
+			if err != nil {
+				slog.Error("failed to init whatsapp", "error", err)
+			} else {
+				waClient = client
+				rlCfg := notifikasi.DefaultRateLimiterConfig()
+				limiter := notifikasi.NewRateLimiter(rlCfg)
+				registry.Register(notifikasi.NewWhatsAppProviderWithClient(client, limiter))
+				go client.Connect(workerCtx)
+			}
+		}
+		waHandler := notifikasi.NewWhatsAppHandler(waClient)
 
 		worker := notifikasi.NewWorker(notifRepo, registry, notifikasi.DefaultWorkerConfig()).
 			WithPreferensi(prefRepo)
@@ -307,6 +320,7 @@ func main() {
 			r.Post("/notifikasi/{id}/retry", notifHandler.Retry)
 			notifikasi.RegisterPreferensiRoutes(r, prefHandler)
 			notifikasi.RegisterTelegramRoutes(r, tgHandler)
+			notifikasi.RegisterWhatsAppRoutes(r, waHandler)
 		})
 
 		laporanRepo := laporan.NewRepository(db)

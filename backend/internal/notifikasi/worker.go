@@ -124,7 +124,7 @@ func (w *Worker) processItem(n *Notifikasi) {
 
 	provider, err := w.registry.Get(n.Tipe)
 	if err != nil {
-		w.markFailed(n, fmt.Sprintf("provider error: %v", err))
+		w.markFailed(n, fmt.Errorf("provider error: %v", err).Error())
 		return
 	}
 
@@ -142,6 +142,21 @@ func (w *Worker) processItem(n *Notifikasi) {
 	errMsg := ""
 	if result.Error != nil {
 		errMsg = result.Error.Error()
+	}
+
+	if result.Retryable {
+		delay := w.cfg.RetryDelay
+		if delay == 0 {
+			delay = 30 * time.Second
+		}
+		scheduledAt := time.Now().UTC().Add(delay).Format("2006-01-02 15:04:05")
+		if err := w.repo.Reschedule(n.ID, scheduledAt, errMsg); err != nil {
+			w.logger.Error("gagal reschedule", "id", n.ID, "error", err)
+		} else {
+			w.logger.Warn("notifikasi di-reschedule (retryable)",
+				"id", n.ID, "tipe", n.Tipe, "scheduled_at", scheduledAt, "error", errMsg)
+		}
+		return
 	}
 
 	newRetryCount := n.RetryCount + 1

@@ -5,8 +5,9 @@ import (
 )
 
 type SendResult struct {
-	Success bool
-	Error   error
+	Success   bool
+	Retryable bool
+	Error     error
 }
 
 type Notifier interface {
