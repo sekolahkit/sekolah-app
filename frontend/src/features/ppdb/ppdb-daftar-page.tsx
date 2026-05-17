@@ -1,16 +1,18 @@
 import { useState } from 'react'
 import { useDaftar } from '@/hooks/use-ppdb'
+import { useTahunAjaranAktif } from '@/hooks/use-tahun-ajaran'
 import { CheckCircle, Upload } from 'lucide-react'
 
 export function PpdbDaftarPage() {
   const daftarMutation = useDaftar()
+  const { data: taAktif } = useTahunAjaranAktif()
   const [success, setSuccess] = useState<{ id: number } | null>(null)
   const [error, setError] = useState('')
   const [foto, setFoto] = useState<File | null>(null)
   const [berkas, setBerkas] = useState<File[]>([])
   const [uploading, setUploading] = useState(false)
   const [form, setForm] = useState({
-    tahun_ajaran_id: '1',
+    tahun_ajaran_id: '',
     nama_lengkap: '',
     nik: '',
     tempat_lahir: '',
@@ -25,6 +27,11 @@ export function PpdbDaftarPage() {
     no_hp_ortu: '',
     pekerjaan_ortu: '',
   })
+
+  const effectiveForm = {
+    ...form,
+    tahun_ajaran_id: form.tahun_ajaran_id || (taAktif?.id ? String(taAktif.id) : ''),
+  }
 
   function handleChange(field: string, value: string) {
     setForm((f) => ({ ...f, [field]: value }))
@@ -42,8 +49,8 @@ export function PpdbDaftarPage() {
       }
 
       const result = await daftarMutation.mutateAsync({
-        ...form,
-        tahun_ajaran_id: Number(form.tahun_ajaran_id),
+        ...effectiveForm,
+        tahun_ajaran_id: Number(effectiveForm.tahun_ajaran_id),
         foto: fotoPath,
       })
 

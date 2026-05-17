@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Sekolahkit/sekolah-app/internal/auth"
+	"github.com/Sekolahkit/sekolah-app/internal/jurusan"
 	"github.com/Sekolahkit/sekolah-app/internal/kelas"
 	"github.com/Sekolahkit/sekolah-app/internal/laporan"
 	"github.com/Sekolahkit/sekolah-app/internal/migration"
@@ -22,6 +23,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
+	"github.com/Sekolahkit/sekolah-app/internal/tahun_ajaran"
 	"github.com/Sekolahkit/sekolah-app/internal/upload"
 	"github.com/Sekolahkit/sekolah-app/pkg/frontend"
 	"github.com/Sekolahkit/sekolah-app/pkg/config"
@@ -135,12 +137,22 @@ func main() {
 		rekeningService := rekening.NewService(rekeningRepo)
 		rekeningHandler := rekening.NewHandler(rekeningService)
 
+		tahunAjaranRepo := tahun_ajaran.NewRepository(db)
+		tahunAjaranService := tahun_ajaran.NewService(tahunAjaranRepo)
+		tahunAjaranHandler := tahun_ajaran.NewHandler(tahunAjaranService)
+
+		jurusanRepo := jurusan.NewRepository(db)
+		jurusanService := jurusan.NewService(jurusanRepo)
+		jurusanHandler := jurusan.NewHandler(jurusanService)
+
 		r.Group(func(r chi.Router) {
 			r.Use(mw.Auth(secrets.JWTSecret))
 
 			r.Get("/sekolah", sekolahHandler.Get)
 
 			r.Get("/rekening-sekolah/aktif", rekeningHandler.ListAktif)
+
+			r.Get("/tahun-ajaran/aktif", tahunAjaranHandler.GetAktif)
 		})
 
 		r.Group(func(r chi.Router) {
@@ -155,6 +167,9 @@ func main() {
 				r.Put("/{id}", rekeningHandler.Update)
 				r.Delete("/{id}", rekeningHandler.Delete)
 			})
+
+			tahun_ajaran.RegisterRoutes(r, tahunAjaranHandler)
+			jurusan.RegisterRoutes(r, jurusanHandler)
 		})
 
 		r.Group(func(r chi.Router) {
