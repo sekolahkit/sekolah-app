@@ -79,7 +79,9 @@ type Secrets struct {
 	SMTPUser           string
 	SMTPPassword       string
 	SMTPFrom           string
-	TelegramBotToken   string
+	TelegramBotToken    string
+	TelegramBotUsername  string
+	TelegramWebhookSecret string
 	MidtransServerKey  string
 	MidtransClientKey  string
 	XenditSecretKey    string
@@ -115,7 +117,9 @@ func LoadSecrets() *Secrets {
 		SMTPUser:           os.Getenv("SMTP_USER"),
 		SMTPPassword:       os.Getenv("SMTP_PASSWORD"),
 		SMTPFrom:           os.Getenv("SMTP_FROM"),
-		TelegramBotToken:   os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotToken:    os.Getenv("TELEGRAM_BOT_TOKEN"),
+		TelegramBotUsername:  os.Getenv("TELEGRAM_BOT_USERNAME"),
+		TelegramWebhookSecret: os.Getenv("TELEGRAM_WEBHOOK_SECRET"),
 		MidtransServerKey:  os.Getenv("MIDTRANS_SERVER_KEY"),
 		MidtransClientKey:  os.Getenv("MIDTRANS_CLIENT_KEY"),
 		XenditSecretKey:    os.Getenv("XENDIT_SECRET_KEY"),

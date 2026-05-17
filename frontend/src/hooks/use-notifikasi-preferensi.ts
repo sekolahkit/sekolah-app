@@ -56,3 +56,14 @@ export function useUpsertPreferensi() {
     },
   })
 }
+
+export function useGenerateTelegramInvite() {
+  return useMutation({
+    mutationFn: async (preferenceId: number) => {
+      const res = await api.post<ApiResponse<{ invite_link: string; expires_in: string }>>(
+        `/notifikasi/preferensi/${preferenceId}/telegram-invite`
+      )
+      return res.data.data
+    },
+  })
+}
