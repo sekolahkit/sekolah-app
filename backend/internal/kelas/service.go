@@ -19,7 +19,7 @@ type CreateRequest struct {
 	Nama          string `json:"nama"`
 	Tingkat       string `json:"tingkat"`
 	JurusanID     int64  `json:"jurusan_id"`
-	WaliKelas     string `json:"wali_kelas"`
+	WaliKelasID   *int64 `json:"wali_kelas_id"`
 }
 
 type UpdateRequest struct {
@@ -27,7 +27,7 @@ type UpdateRequest struct {
 	Nama          string `json:"nama"`
 	Tingkat       string `json:"tingkat"`
 	JurusanID     int64  `json:"jurusan_id"`
-	WaliKelas     string `json:"wali_kelas"`
+	WaliKelasID   *int64 `json:"wali_kelas_id"`
 }
 
 type AddSiswaRequest struct {
@@ -61,7 +61,7 @@ func (s *Service) Create(sekolahID int64, req CreateRequest) (*Kelas, error) {
 		Nama:          req.Nama,
 		Tingkat:       req.Tingkat,
 		JurusanID:     req.JurusanID,
-		WaliKelas:     req.WaliKelas,
+		WaliKelasID:   req.WaliKelasID,
 	}
 
 	id, err := s.repo.Create(k)
@@ -90,7 +90,7 @@ func (s *Service) Update(sekolahID, id int64, req UpdateRequest) (*Kelas, error)
 		Nama:          req.Nama,
 		Tingkat:       req.Tingkat,
 		JurusanID:     req.JurusanID,
-		WaliKelas:     req.WaliKelas,
+		WaliKelasID:   req.WaliKelasID,
 	}
 
 	if err := s.repo.Update(sekolahID, id, k); err != nil {
@@ -113,7 +113,7 @@ func (s *Service) AddSiswa(sekolahID, kelasID int64, req AddSiswaRequest) error 
 		return validator.ValidationErrors{{Field: "siswa_id", Message: "wajib diisi"}}
 	}
 
-	_, err := s.repo.GetByID(sekolahID, kelasID)
+	kelas, err := s.repo.GetByID(sekolahID, kelasID)
 	if err != nil {
 		return fmt.Errorf("kelas tidak ditemukan")
 	}
@@ -122,7 +122,7 @@ func (s *Service) AddSiswa(sekolahID, kelasID int64, req AddSiswaRequest) error 
 		return fmt.Errorf("siswa tidak ditemukan")
 	}
 
-	exists, err := s.repo.SiswaInKelas(kelasID, req.SiswaID)
+	exists, err := s.repo.SiswaInKelas(sekolahID, kelasID, req.SiswaID)
 	if err != nil {
 		return fmt.Errorf("cek siswa: %w", err)
 	}
@@ -130,7 +130,7 @@ func (s *Service) AddSiswa(sekolahID, kelasID int64, req AddSiswaRequest) error 
 		return validator.ValidationErrors{{Field: "siswa_id", Message: "siswa sudah ada di kelas ini"}}
 	}
 
-	return s.repo.AddSiswa(kelasID, req.SiswaID)
+	return s.repo.AddSiswa(sekolahID, kelasID, req.SiswaID, kelas.TahunAjaranID)
 }
 
 func (s *Service) RemoveSiswa(sekolahID, kelasID, siswaID int64) error {
@@ -139,7 +139,7 @@ func (s *Service) RemoveSiswa(sekolahID, kelasID, siswaID int64) error {
 		return fmt.Errorf("kelas tidak ditemukan")
 	}
 
-	exists, err := s.repo.SiswaInKelas(kelasID, siswaID)
+	exists, err := s.repo.SiswaInKelas(sekolahID, kelasID, siswaID)
 	if err != nil {
 		return fmt.Errorf("cek siswa: %w", err)
 	}
@@ -147,7 +147,7 @@ func (s *Service) RemoveSiswa(sekolahID, kelasID, siswaID int64) error {
 		return fmt.Errorf("siswa tidak ada di kelas ini")
 	}
 
-	return s.repo.RemoveSiswa(kelasID, siswaID)
+	return s.repo.RemoveSiswa(sekolahID, kelasID, siswaID)
 }
 
 func (s *Service) ListSiswa(sekolahID, kelasID int64) ([]int64, error) {
@@ -155,5 +155,5 @@ func (s *Service) ListSiswa(sekolahID, kelasID int64) ([]int64, error) {
 	if err != nil {
 		return nil, fmt.Errorf("kelas tidak ditemukan")
 	}
-	return s.repo.ListSiswa(kelasID)
+	return s.repo.ListSiswa(sekolahID, kelasID)
 }
