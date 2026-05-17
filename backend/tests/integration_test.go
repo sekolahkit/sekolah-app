@@ -21,6 +21,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/ppdb"
 	"github.com/Sekolahkit/sekolah-app/internal/rekening"
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
+	"github.com/Sekolahkit/sekolah-app/internal/selfservice"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
 	"github.com/Sekolahkit/sekolah-app/internal/upload"
@@ -283,6 +284,40 @@ func setupTestServer(t *testing.T) (*httptest.Server, *sql.DB) {
 			r.Get("/laporan/ppdb/export", laporanHandler.ExportPPDB)
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
 			r.Get("/laporan/siswa/export", laporanHandler.ExportSiswa)
+		})
+
+		ssRepo := selfservice.NewRepository(db)
+		ssService := selfservice.NewService(ssRepo)
+		ssHandler := selfservice.NewHandler(ssService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Use(mw.RequireRole("guru"))
+			r.Get("/dashboard/guru", ssHandler.DashboardGuru)
+			r.Get("/guru/kelas", ssHandler.ListGuruKelas)
+			r.Get("/guru/kelas/{id}/siswa", ssHandler.ListGuruSiswaByKelas)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Use(mw.RequireRole("siswa"))
+			r.Get("/dashboard/siswa", ssHandler.DashboardSiswa)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Use(mw.RequireRole("orangtua"))
+			r.Get("/dashboard/orangtua", ssHandler.DashboardOrangtua)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(testJWTSecret))
+			r.Use(mw.RequireRole("siswa", "orangtua"))
+			r.Get("/me/siswa", ssHandler.ListLinkedSiswa)
+			r.Get("/me/siswa/{id}", ssHandler.GetSiswaDetail)
+			r.Get("/me/siswa/{id}/tagihan", ssHandler.GetTagihan)
+			r.Get("/me/siswa/{id}/pembayaran", ssHandler.GetPembayaran)
+			r.Post("/me/pembayaran", ssHandler.CreatePembayaran)
 		})
 
 		uploadTmpDir := t.TempDir()
@@ -1414,5 +1449,263 @@ func TestChangePassword(t *testing.T) {
 	resp2.Body.Close()
 	if resp2.StatusCode != 401 {
 		t.Errorf("old password should fail: expected 401, got %d", resp2.StatusCode)
+	}
+}
+
+func setupSelfServiceData(t *testing.T, db *sql.DB) {
+	t.Helper()
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (1, 'siswa@test1.id', ?, 'Siswa Satu', 'siswa', 1)", hash)
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (1, 'ortu@test1.id', ?, 'Orangtua Satu', 'orangtua', 1)", hash)
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (1, 'guru@test1.id', ?, 'Guru Satu', 'guru', 1)", hash)
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (1, 'siswa2@test1.id', ?, 'Siswa Dua', 'siswa', 1)", hash)
+
+	db.Exec("INSERT INTO tahun_ajaran (sekolah_id, nama, aktif) VALUES (1, '2024/2025', 1)")
+	db.Exec("INSERT INTO siswa (sekolah_id, nis, nama, jenis_kelamin, status) VALUES (1, '001', 'Anak Satu', 'L', 'aktif')")
+	db.Exec("INSERT INTO siswa (sekolah_id, nis, nama, jenis_kelamin, status) VALUES (1, '002', 'Anak Dua', 'P', 'aktif')")
+
+	db.Exec("INSERT INTO pengguna_siswa (sekolah_id, pengguna_id, siswa_id, hubungan) VALUES (1, 2, 1, 'diri_sendiri')")
+	db.Exec("INSERT INTO pengguna_siswa (sekolah_id, pengguna_id, siswa_id, hubungan) VALUES (1, 3, 1, 'ayah')")
+	db.Exec("INSERT INTO pengguna_siswa (sekolah_id, pengguna_id, siswa_id, hubungan) VALUES (1, 5, 2, 'diri_sendiri')")
+
+	db.Exec("INSERT INTO kategori_pembayaran (sekolah_id, nama, deskripsi) VALUES (1, 'SPP', 'SPP Bulanan')")
+	db.Exec("INSERT INTO tagihan (sekolah_id, siswa_id, kategori_id, tahun_ajaran_id, nominal, status) VALUES (1, 1, 1, 1, 500000, 'belum_bayar')")
+	db.Exec("INSERT INTO tagihan (sekolah_id, siswa_id, kategori_id, tahun_ajaran_id, nominal, status) VALUES (1, 2, 1, 1, 500000, 'belum_bayar')")
+
+	db.Exec("INSERT INTO kelas (sekolah_id, nama, tingkat, wali_kelas_id, tahun_ajaran_id) VALUES (1, 'X-A', 10, 4, 1)")
+	db.Exec("INSERT INTO kelas_siswa (sekolah_id, kelas_id, siswa_id, tahun_ajaran_id) VALUES (1, 1, 1, 1)")
+	db.Exec("INSERT INTO kelas_siswa (sekolah_id, kelas_id, siswa_id, tahun_ajaran_id) VALUES (1, 1, 2, 1)")
+}
+
+func TestSelfService_SiswaCanAccessOwnData(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+
+	resp, result := authRequest("GET", server.URL+"/api/v1/me/siswa", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("list linked siswa: expected 200, got %d", resp.StatusCode)
+	}
+	data := result["data"].([]interface{})
+	if len(data) != 1 {
+		t.Fatalf("expected 1 linked siswa, got %d", len(data))
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/1", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("get own siswa detail: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/1/tagihan", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("get own tagihan: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/1/pembayaran", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("get own pembayaran: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_SiswaCannotAccessOtherSiswa(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/me/siswa/2", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("access other siswa: expected 404, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/2/tagihan", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("access other siswa tagihan: expected 404, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/2/pembayaran", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("access other siswa pembayaran: expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_OrangtuaCanAccessLinkedChild(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "ortu@test1.id", "password123")
+
+	resp, result := authRequest("GET", server.URL+"/api/v1/me/siswa", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("orangtua list linked: expected 200, got %d", resp.StatusCode)
+	}
+	data := result["data"].([]interface{})
+	if len(data) != 1 {
+		t.Fatalf("expected 1 linked child, got %d", len(data))
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/1", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("orangtua access linked child: expected 200, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_OrangtuaCannotAccessUnlinkedChild(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "ortu@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/me/siswa/2", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("orangtua access unlinked child: expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_SiswaCanSubmitPaymentForLinkedTagihan(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/me/pembayaran", map[string]interface{}{
+		"tagihan_id": 1, "jumlah": 500000, "tanggal": "2024-01-15", "metode": "cash",
+	}, cookies)
+	if resp.StatusCode != 201 {
+		t.Errorf("submit payment for linked tagihan: expected 201, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_SiswaCannotPayUnlinkedTagihan(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+
+	resp, _ := authRequest("POST", server.URL+"/api/v1/me/pembayaran", map[string]interface{}{
+		"tagihan_id": 2, "jumlah": 500000, "tanggal": "2024-01-15", "metode": "cash",
+	}, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("pay unlinked tagihan: expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_SiswaCannotVerifyPayment(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+
+	resp, _ := authRequest("PUT", server.URL+"/api/v1/pembayaran/1/verify", nil, cookies)
+	if resp.StatusCode == 200 {
+		t.Errorf("siswa should not be able to verify payments")
+	}
+}
+
+func TestSelfService_DashboardRoleRestriction(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	siswaCookies := doLogin(t, server, "test1", "siswa@test1.id", "password123")
+	ortuCookies := doLogin(t, server, "test1", "ortu@test1.id", "password123")
+	guruCookies := doLogin(t, server, "test1", "guru@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/dashboard/siswa", nil, siswaCookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("siswa dashboard: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/dashboard/orangtua", nil, ortuCookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("orangtua dashboard: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/dashboard/guru", nil, guruCookies)
+	if resp.StatusCode != 200 {
+		t.Errorf("guru dashboard: expected 200, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/dashboard/admin", nil, siswaCookies)
+	if resp.StatusCode != 403 {
+		t.Errorf("siswa accessing admin dashboard: expected 403, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/dashboard/siswa", nil, guruCookies)
+	if resp.StatusCode != 403 {
+		t.Errorf("guru accessing siswa dashboard: expected 403, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_GuruCanAccessAssignedClass(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	cookies := doLogin(t, server, "test1", "guru@test1.id", "password123")
+
+	resp, result := authRequest("GET", server.URL+"/api/v1/guru/kelas", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("guru list kelas: expected 200, got %d", resp.StatusCode)
+	}
+	data := result["data"].([]interface{})
+	if len(data) != 1 {
+		t.Fatalf("expected 1 class, got %d", len(data))
+	}
+
+	resp, result = authRequest("GET", server.URL+"/api/v1/guru/kelas/1/siswa", nil, cookies)
+	if resp.StatusCode != 200 {
+		t.Fatalf("guru list siswa in class: expected 200, got %d", resp.StatusCode)
+	}
+	students := result["data"].([]interface{})
+	if len(students) != 2 {
+		t.Errorf("expected 2 students in class, got %d", len(students))
+	}
+}
+
+func TestSelfService_GuruCannotAccessUnassignedClass(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	db.Exec("INSERT INTO kelas (sekolah_id, nama, tingkat, tahun_ajaran_id) VALUES (1, 'X-B', 10, 1)")
+
+	cookies := doLogin(t, server, "test1", "guru@test1.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/guru/kelas/2/siswa", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("guru access unassigned class: expected 404, got %d", resp.StatusCode)
+	}
+}
+
+func TestSelfService_CrossSchoolRejected(t *testing.T) {
+	server, db := setupTestServer(t)
+	doSetup(t, server, "test1", "admin@test1.id", "password123")
+	setupSelfServiceData(t, db)
+
+	hash, _ := bcryptHash("password123")
+	db.Exec("INSERT INTO sekolah (nama, kode) VALUES ('School 2', 'test2')")
+	db.Exec("INSERT INTO pengguna (sekolah_id, email, password, nama, role, aktif) VALUES (2, 'siswa@test2.id', ?, 'Siswa School2', 'siswa', 1)", hash)
+	db.Exec("INSERT INTO siswa (sekolah_id, nis, nama, jenis_kelamin, status) VALUES (2, '003', 'Anak School2', 'L', 'aktif')")
+	db.Exec("INSERT INTO pengguna_siswa (sekolah_id, pengguna_id, siswa_id, hubungan) VALUES (2, 6, 3, 'diri_sendiri')")
+
+	cookies := doLogin(t, server, "test2", "siswa@test2.id", "password123")
+
+	resp, _ := authRequest("GET", server.URL+"/api/v1/me/siswa/1", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("cross-school access siswa: expected 404, got %d", resp.StatusCode)
+	}
+
+	resp, _ = authRequest("GET", server.URL+"/api/v1/me/siswa/1/tagihan", nil, cookies)
+	if resp.StatusCode != 404 {
+		t.Errorf("cross-school access tagihan: expected 404, got %d", resp.StatusCode)
 	}
 }

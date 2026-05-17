@@ -14,6 +14,8 @@ import { LaporanPage } from '@/features/laporan/laporan-page'
 import { NotifikasiPage } from '@/features/notifikasi/notifikasi-page'
 import { UserManagementPage } from '@/features/pengguna/pengguna-page'
 import { ChangePasswordPage } from '@/features/pengguna/change-password-page'
+import { SelfServicePage } from '@/features/selfservice/selfservice-page'
+import { GuruKelasPage } from '@/features/selfservice/guru-kelas-page'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth()
@@ -55,6 +57,8 @@ export function AppRouter() {
           <Route path="pengguna" element={<UserManagementPage />} />
           <Route path="ubah-password" element={<ChangePasswordPage />} />
           <Route path="pengaturan" element={<PengaturanPage />} />
+          <Route path="data-saya" element={<SelfServicePage />} />
+          <Route path="kelas-saya" element={<GuruKelasPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

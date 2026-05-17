@@ -22,6 +22,7 @@ import (
 	"github.com/Sekolahkit/sekolah-app/internal/ppdb"
 	"github.com/Sekolahkit/sekolah-app/internal/rekening"
 	"github.com/Sekolahkit/sekolah-app/internal/sekolah"
+	"github.com/Sekolahkit/sekolah-app/internal/selfservice"
 	"github.com/Sekolahkit/sekolah-app/internal/setup"
 	"github.com/Sekolahkit/sekolah-app/internal/siswa"
 	"github.com/Sekolahkit/sekolah-app/internal/tahun_ajaran"
@@ -397,6 +398,40 @@ func main() {
 			r.Get("/laporan/ppdb/export", laporanHandler.ExportPPDB)
 			r.Get("/laporan/siswa", laporanHandler.RekapSiswa)
 			r.Get("/laporan/siswa/export", laporanHandler.ExportSiswa)
+		})
+
+		ssRepo := selfservice.NewRepository(db)
+		ssService := selfservice.NewService(ssRepo)
+		ssHandler := selfservice.NewHandler(ssService)
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("guru"))
+			r.Get("/dashboard/guru", ssHandler.DashboardGuru)
+			r.Get("/guru/kelas", ssHandler.ListGuruKelas)
+			r.Get("/guru/kelas/{id}/siswa", ssHandler.ListGuruSiswaByKelas)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("siswa"))
+			r.Get("/dashboard/siswa", ssHandler.DashboardSiswa)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("orangtua"))
+			r.Get("/dashboard/orangtua", ssHandler.DashboardOrangtua)
+		})
+
+		r.Group(func(r chi.Router) {
+			r.Use(mw.Auth(secrets.JWTSecret))
+			r.Use(mw.RequireRole("siswa", "orangtua"))
+			r.Get("/me/siswa", ssHandler.ListLinkedSiswa)
+			r.Get("/me/siswa/{id}", ssHandler.GetSiswaDetail)
+			r.Get("/me/siswa/{id}/tagihan", ssHandler.GetTagihan)
+			r.Get("/me/siswa/{id}/pembayaran", ssHandler.GetPembayaran)
+			r.Post("/me/pembayaran", ssHandler.CreatePembayaran)
 		})
 
 		uploadService := upload.NewService("./uploads", cfg.Upload.MaxSize, cfg.Upload.AllowedTypes)
