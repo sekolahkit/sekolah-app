@@ -52,11 +52,15 @@ function AdminPembayaranView() {
 function TagihanSection() {
   const [page, setPage] = useState(1)
   const [statusFilter, setStatusFilter] = useState('')
+  const [tahunAjaranFilter, setTahunAjaranFilter] = useState('')
   const [search, setSearch] = useState('')
   const [showCreate, setShowCreate] = useState(false)
   const [showBulk, setShowBulk] = useState(false)
+  const { data: taList } = useTahunAjaranList()
+  const { data: taAktif } = useTahunAjaranAktif()
 
-  const { data, isLoading } = useTagihanList({ page, limit: 20, status: statusFilter || undefined, search: search || undefined })
+  const effectiveTA = tahunAjaranFilter || (taAktif?.id ? String(taAktif.id) : '')
+  const { data, isLoading } = useTagihanList({ page, limit: 20, status: statusFilter || undefined, tahun_ajaran_id: effectiveTA ? Number(effectiveTA) : undefined, search: search || undefined })
 
   return (
     <>
@@ -70,6 +74,12 @@ function TagihanSection() {
           <option value="belum_bayar">Belum Bayar</option>
           <option value="sebagian">Sebagian</option>
           <option value="lunas">Lunas</option>
+        </select>
+        <select value={effectiveTA} onChange={(e) => { setTahunAjaranFilter(e.target.value); setPage(1) }} className="rounded-md border border-input bg-background px-3 py-2 text-sm text-foreground">
+          <option value="">Semua Tahun</option>
+          {taList?.map((ta) => (
+            <option key={ta.id} value={ta.id}>{ta.nama}{ta.aktif ? ' (Aktif)' : ''}</option>
+          ))}
         </select>
         <button onClick={() => setShowCreate(true)} className="flex items-center gap-2 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground hover:opacity-90">
           <Plus className="h-4 w-4" /> Buat Tagihan

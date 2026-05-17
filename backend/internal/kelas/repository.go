@@ -15,14 +15,15 @@ func NewRepository(db *sql.DB) *Repository {
 }
 
 type Kelas struct {
-	ID           int64  `json:"id"`
-	SekolahID    int64  `json:"sekolah_id"`
-	TahunAjaranID int64 `json:"tahun_ajaran_id"`
-	Nama         string `json:"nama"`
-	Tingkat      string `json:"tingkat"`
-	WaliKelas    string `json:"wali_kelas"`
-	CreatedAt    string `json:"created_at"`
-	UpdatedAt    string `json:"updated_at"`
+	ID            int64  `json:"id"`
+	SekolahID     int64  `json:"sekolah_id"`
+	TahunAjaranID int64  `json:"tahun_ajaran_id"`
+	Nama          string `json:"nama"`
+	Tingkat       string `json:"tingkat"`
+	JurusanID     int64  `json:"jurusan_id"`
+	WaliKelas     string `json:"wali_kelas"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 type KelasSiswa struct {
@@ -41,7 +42,8 @@ type ListParams struct {
 }
 
 func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, error) {
-	query := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "wali_kelas", "created_at", "updated_at").
+	query := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat",
+		"COALESCE(jurusan_id,0)", "wali_kelas", "created_at", "updated_at").
 		From("kelas").
 		Where(sq.Eq{"sekolah_id": sekolahID})
 
@@ -76,7 +78,7 @@ func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, err
 	var list []Kelas
 	for rows.Next() {
 		var k Kelas
-		err := rows.Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
+		err := rows.Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -87,11 +89,12 @@ func (r *Repository) List(sekolahID int64, params ListParams) ([]Kelas, int, err
 
 func (r *Repository) GetByID(sekolahID, id int64) (*Kelas, error) {
 	var k Kelas
-	err := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "wali_kelas", "created_at", "updated_at").
+	err := sq.Select("id", "sekolah_id", "tahun_ajaran_id", "nama", "tingkat",
+		"COALESCE(jurusan_id,0)", "wali_kelas", "created_at", "updated_at").
 		From("kelas").
 		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
 		RunWith(r.db).QueryRow().
-		Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
+		Scan(&k.ID, &k.SekolahID, &k.TahunAjaranID, &k.Nama, &k.Tingkat, &k.JurusanID, &k.WaliKelas, &k.CreatedAt, &k.UpdatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -100,8 +103,8 @@ func (r *Repository) GetByID(sekolahID, id int64) (*Kelas, error) {
 
 func (r *Repository) Create(k *Kelas) (int64, error) {
 	result, err := sq.Insert("kelas").
-		Columns("sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "wali_kelas").
-		Values(k.SekolahID, k.TahunAjaranID, k.Nama, k.Tingkat, k.WaliKelas).
+		Columns("sekolah_id", "tahun_ajaran_id", "nama", "tingkat", "jurusan_id", "wali_kelas").
+		Values(k.SekolahID, k.TahunAjaranID, k.Nama, k.Tingkat, nullInt64(k.JurusanID), k.WaliKelas).
 		RunWith(r.db).Exec()
 	if err != nil {
 		return 0, err
@@ -114,11 +117,19 @@ func (r *Repository) Update(sekolahID, id int64, k *Kelas) error {
 		Set("tahun_ajaran_id", k.TahunAjaranID).
 		Set("nama", k.Nama).
 		Set("tingkat", k.Tingkat).
+		Set("jurusan_id", nullInt64(k.JurusanID)).
 		Set("wali_kelas", k.WaliKelas).
 		Set("updated_at", sq.Expr("CURRENT_TIMESTAMP")).
 		Where(sq.Eq{"id": id, "sekolah_id": sekolahID}).
 		RunWith(r.db).Exec()
 	return err
+}
+
+func nullInt64(v int64) interface{} {
+	if v == 0 {
+		return nil
+	}
+	return v
 }
 
 func (r *Repository) Delete(sekolahID, id int64) error {
